@@ -8,17 +8,26 @@ import pytest
 
 from app.core.config import Settings
 from app.core.errors import ServiceUnavailableError
-from app.services import llm
+from app.services import anthropic_client, llm
 from app.services.rag.retrieval import RetrievedChunk
 
-UNCONFIGURED = Settings(anthropic_api_key=None)
-CONFIGURED = Settings(anthropic_api_key="fake-key-for-tests")
+# Every provider unset -> "auto" resolves to nothing -> llm_not_configured.
+UNCONFIGURED = Settings(
+    llm_provider="auto",
+    anthropic_api_key=None,
+    gemini_api_key=None,
+    groq_api_key=None,
+    ollama_base_url=None,
+)
+# These tests drive the Anthropic provider with a fake SDK client; the other
+# providers are covered in tests/test_llm_provider.py.
+CONFIGURED = Settings(llm_provider="anthropic", anthropic_api_key="fake-key-for-tests")
 
 SAMPLE_CHUNK = RetrievedChunk(
     chunk_id=uuid.uuid4(),
     document_id=uuid.uuid4(),
     document_title="Information Technology Act, 2000",
-    source_url="https://example.test/it-act",
+    source_url="https://example.com/it-act",
     section="43A",
     article=None,
     content="A body corporate handling sensitive personal data must implement "
@@ -81,7 +90,7 @@ async def test_generate_grounded_answer_raises_when_not_configured() -> None:
 
 async def test_generate_grounded_answer_joins_text_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     response = _FakeResponse([_FakeTextBlock("Hello "), _FakeTextBlock("there.")])
-    monkeypatch.setattr(llm, "get_client", lambda settings: _FakeClient(response))
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _FakeClient(response))
 
     text = await llm.generate_grounded_answer(
         "hi", history=[], context=[SAMPLE_CHUNK], settings=CONFIGURED
@@ -93,7 +102,9 @@ async def test_generate_grounded_answer_joins_text_blocks(monkeypatch: pytest.Mo
 async def test_generate_grounded_answer_has_a_fallback_for_empty_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(llm, "get_client", lambda settings: _FakeClient(_FakeResponse([])))
+    monkeypatch.setattr(
+        anthropic_client, "get_client", lambda settings: _FakeClient(_FakeResponse([]))
+    )
 
     text = await llm.generate_grounded_answer(
         "hi", history=[], context=[SAMPLE_CHUNK], settings=CONFIGURED
@@ -105,7 +116,7 @@ async def test_generate_grounded_answer_has_a_fallback_for_empty_response(
 async def test_generate_grounded_answer_wraps_transport_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(llm, "get_client", lambda settings: _RaisingClient())
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _RaisingClient())
     with pytest.raises(ServiceUnavailableError) as exc_info:
         await llm.generate_grounded_answer(
             "hi", history=[], context=[SAMPLE_CHUNK], settings=CONFIGURED
@@ -127,7 +138,7 @@ async def test_generate_grounded_answer_includes_numbered_sources_in_the_prompt(
         def __init__(self) -> None:
             self.messages = _CapturingMessages()
 
-    monkeypatch.setattr(llm, "get_client", lambda settings: _CapturingClient())
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _CapturingClient())
 
     await llm.generate_grounded_answer(
         "What security practices are required?",

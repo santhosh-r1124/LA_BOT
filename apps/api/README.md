@@ -27,10 +27,12 @@ app/
 │   ├── redis.py            # async Redis client lifecycle
 │   ├── email.py            # EmailSender abstraction (dev: logs; Phase 11: real provider)
 │   ├── tokens.py           # issue + persist an access/refresh token pair
-│   ├── anthropic_client.py # shared Claude client construction (Phase 2/4/5)
-│   ├── legal_classifier.py # Claude: category + jurisdiction + risk classification (Phase 2/5)
+│   ├── llm_provider.py     # provider layer: Gemini / Groq / Ollama / Anthropic (ADR 0010)
+│   ├── anthropic_client.py # Anthropic SDK client (used by the anthropic provider only)
+│   ├── rate_limit.py       # per-client rate limit for AI endpoints (Redis, fail-open)
+│   ├── legal_classifier.py # LLM: category + jurisdiction + risk classification (Phase 2/5)
 │   ├── risk_engine.py      # risk_level -> advocate-recommendation decision (Phase 5)
-│   ├── llm.py              # Claude: grounded answer generation (Phase 4)
+│   ├── llm.py              # LLM: grounded answer generation (Phase 4)
 │   ├── ingestion/          # fetch/extract/clean/chunk/embed/search (Phase 3)
 │   ├── rag/                # hybrid search + Reciprocal Rank Fusion (Phase 4)
 │   └── document_assistant/ # questionnaire schema + draft generation (Phase 6)
@@ -85,25 +87,25 @@ token from `/auth/register` or `/auth/login` to call protected routes.
 ## Chat (Phase 2) + grounded retrieval (Phase 4) + risk routing (Phase 5)
 
 `POST /api/v1/chat/messages` works with or without a bearer token (public
-tier). One Claude call classifies the message
+tier). One model call classifies the message
 (`app/services/legal_classifier.py::classify_query` — legal category,
 jurisdiction scope, **risk level** LOW/MEDIUM/HIGH/CRITICAL, in/out of
 scope — all four in the same forced tool call, see
 [`docs/adr/0008-risk-scoring.md`](../../docs/adr/0008-risk-scoring.md)). If in
 scope, `app/services/rag/retrieval.py::hybrid_search` retrieves candidate
 `legal_chunks` (pgvector cosine similarity + Postgres full-text search, fused
-with Reciprocal Rank Fusion); a second Claude call
+with Reciprocal Rank Fusion); a second model call
 (`app/services/llm.py::generate_grounded_answer`) answers using only those
 chunks and cites them. If retrieval finds nothing — empty corpus, an
 unrelated question, or `GEMINI_API_KEY` not configured — the endpoint returns
-`INSUFFICIENT_EVIDENCE_MESSAGE` without calling Claude a second time, per the
+`INSUFFICIENT_EVIDENCE_MESSAGE` without a second model call, per the
 platform's "grounded, not guessed" rule. See
 [`docs/adr/0007-hybrid-search-and-grounding.md`](../../docs/adr/0007-hybrid-search-and-grounding.md).
 Either way, a HIGH/CRITICAL risk level
 (`app/services/risk_engine.py::requires_advocate_recommendation`) appends
 `ADVOCATE_RECOMMENDATION_MESSAGE` to the reply.
 
-Requires `ANTHROPIC_API_KEY` in `apps/api/.env` — unset by default. Without
+Requires a model provider (`GEMINI_API_KEY` is enough — free; see docs/api-inventory.md) in `apps/api/.env`. Without
 it the endpoint returns `503 {"error": {"code": "llm_not_configured"}}`
 rather than failing silently or guessing. `GEMINI_API_KEY` is also required
 for grounded answers (see the knowledge-base section below) — its absence
@@ -130,7 +132,7 @@ recorded on the `LegalDocument` row (`ingestion_status=FAILED`,
 `ingestion_error=...`) rather than raised — see it via `GET .../{id}`.
 
 Requires `GEMINI_API_KEY` in `apps/api/.env` (Google AI Studio, free tier) —
-unset by default, same pattern as `ANTHROPIC_API_KEY`. `section`/`article`
+unset by default, same pattern as the model provider keys. `section`/`article`
 chunk metadata is not populated yet (dropped as unreliable against real
 PDF-extracted text — see
 [`docs/adr/0006-chunking-strategy.md`](../../docs/adr/0006-chunking-strategy.md)).
@@ -144,7 +146,7 @@ LLM-generated (see
 [`docs/adr/0009-document-assistant-scope.md`](../../docs/adr/0009-document-assistant-scope.md)).
 `POST /api/v1/documents` validates the answers against the required
 questions for that type (422 with per-field details if any are missing),
-then one Claude call (`document_assistant/generation.py::generate_draft`)
+then one model call (`document_assistant/generation.py::generate_draft`)
 produces a labeled draft plus a "Notes" section and persists it. Works
 anonymously or logged in, same as chat; `GET /documents` /
 `GET /documents/{id}` mirror chat's list/get-conversation shape.
@@ -153,7 +155,7 @@ anonymously or logged in, same as chat; `GET /documents` /
 `app/services/rag/retrieval.py::hybrid_search`; there's no citation-backed
 "answer" here, just a draft assembled from the user's own answers plus
 standard document conventions (docs/adr/0009 explains why this isn't a
-"grounded, not guessed" violation). Requires only `ANTHROPIC_API_KEY` — no
+"grounded, not guessed" violation). Requires only a model provider — no
 `GEMINI_API_KEY` dependency. A generation failure 503s the request directly
 (`llm_not_configured` / `llm_error`, same codes as chat) rather than being
 recorded like an ingestion failure — every `document_requests` row is a

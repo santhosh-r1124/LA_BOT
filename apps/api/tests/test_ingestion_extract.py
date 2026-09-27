@@ -9,7 +9,7 @@ from app.services.ingestion.extract import extract_text
 from app.services.ingestion.fetch import FetchedDocument
 
 
-def _doc(content_type: str, raw: bytes, url: str = "https://example.test/doc") -> FetchedDocument:
+def _doc(content_type: str, raw: bytes, url: str = "https://example.com/doc") -> FetchedDocument:
     import hashlib
 
     return FetchedDocument(
@@ -49,7 +49,7 @@ def test_extract_html_strips_script_style_nav_header_footer() -> None:
 
 def test_extract_by_url_extension_when_content_type_missing() -> None:
     html = b"<p>Hello from a .html file.</p>"
-    text = extract_text(_doc("", html, url="https://example.test/doc.html"))
+    text = extract_text(_doc("", html, url="https://example.com/doc.html"))
     assert "Hello from a .html file." in text
 
 

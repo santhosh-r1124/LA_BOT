@@ -4,7 +4,7 @@ Public-tier like chat (works anonymously or logged in) — the questionnaire
 itself is static per ``document_type`` (``GET /documents/types``) so the
 frontend can render the whole form without a backend round trip per
 question; ``POST /documents`` validates the answers, generates the draft in
-one Claude call, and persists the result. See
+one model call (see app.services.llm_provider), and persists the result. See
 ``app.services.document_assistant`` and
 docs/adr/0009-document-assistant-scope.md for why this isn't RAG-grounded.
 """
@@ -31,6 +31,7 @@ from app.schemas.document_assistant import (
 )
 from app.services.document_assistant import generation
 from app.services.document_assistant.questions import missing_required_answers, questions_for
+from app.services.rate_limit import AIRateLimit
 
 router = APIRouter()
 
@@ -57,7 +58,11 @@ async def list_document_types() -> list[DocumentTypeInfoOut]:
 
 @router.post("", response_model=CreateDocumentResponse, summary="Generate a document draft")
 async def create_document_request(
-    payload: CreateDocumentRequestPayload, user: OptionalUser, db: DbSession, settings: SettingsDep
+    payload: CreateDocumentRequestPayload,
+    user: OptionalUser,
+    db: DbSession,
+    settings: SettingsDep,
+    _rate_limit: AIRateLimit,
 ) -> CreateDocumentResponse:
     missing = missing_required_answers(payload.document_type, payload.answers)
     if missing:

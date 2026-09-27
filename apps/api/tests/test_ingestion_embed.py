@@ -142,3 +142,76 @@ async def test_embed_query_uses_retrieval_query_task_type(monkeypatch: pytest.Mo
     assert len(calls) == 1
     config = calls[0]["config"]
     assert config.task_type == "RETRIEVAL_QUERY"  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# Free-tier protection: 429 retry (ingestion only) + query-embedding cache
+# ---------------------------------------------------------------------------
+
+
+class _FlakyModels:
+    def __init__(self, failures: int, response: object) -> None:
+        self.failures = failures
+        self.response = response
+        self.calls = 0
+
+    async def embed_content(self, **_kwargs: object) -> object:
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise RuntimeError("429 RESOURCE_EXHAUSTED")
+        return self.response
+
+
+class _FlakyClient:
+    def __init__(self, models: _FlakyModels) -> None:
+        self.aio = type("Aio", (), {"models": models})()
+
+
+async def test_ingestion_embeddings_retry_on_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    models = _FlakyModels(2, _FakeEmbedResponse([_FakeContentEmbedding([0.5])]))
+    monkeypatch.setattr(embed, "_client", lambda settings: _FlakyClient(models))
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(embed.asyncio, "sleep", fake_sleep)
+    assert await embed.embed_texts(["x"], settings=CONFIGURED) == [[0.5]]
+    assert models.calls == 3
+    assert len(sleeps) == 2
+
+
+async def test_query_embeddings_do_not_retry_and_report_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    models = _FlakyModels(5, None)
+    monkeypatch.setattr(embed, "_client", lambda settings: _FlakyClient(models))
+    with pytest.raises(ServiceUnavailableError) as exc_info:
+        await embed.embed_texts(["x"], settings=CONFIGURED, task_type="RETRIEVAL_QUERY")
+    assert exc_info.value.code == "embeddings_rate_limited"
+    assert models.calls == 1
+
+
+async def test_embed_query_uses_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(gemini_api_key="k", embedding_dimensions=2)
+    store: dict[str, list[float]] = {}
+    calls: list[list[str]] = []
+
+    async def fake_get(key: str) -> list[float] | None:
+        return store.get(key)
+
+    async def fake_set(key: str, vector: list[float], ttl: int) -> None:
+        store[key] = vector
+
+    async def fake_embed_texts(texts: list[str], **_kwargs: object) -> list[list[float]]:
+        calls.append(texts)
+        return [[0.1, 0.2]]
+
+    monkeypatch.setattr(embed, "_client", lambda settings: object())
+    monkeypatch.setattr(embed, "_cache_get", fake_get)
+    monkeypatch.setattr(embed, "_cache_set", fake_set)
+    monkeypatch.setattr(embed, "embed_texts", fake_embed_texts)
+
+    assert await embed.embed_query("What is  Section 43A?", settings=settings) == [0.1, 0.2]
+    assert await embed.embed_query("what is section 43a?", settings=settings) == [0.1, 0.2]
+    assert len(calls) == 1  # second (normalised-equal) query served from cache

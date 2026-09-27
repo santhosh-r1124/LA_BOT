@@ -1,0 +1,455 @@
+/*
+ * Legal Advisor design system — shared by apps/web and apps/advocate-portal.
+ *
+ * Import AFTER tailwindcss in each app's globals.css:
+ *   @import 'tailwindcss';
+ *   @import '@legal-platform/shared/styles/design-system.css';
+ *
+ * Principles
+ * - One dark, low-saturation base. Glass (translucency + blur) is reserved
+ *   for surfaces that float above content: the header, primary panels and the
+ *   chat composer. Nested items use flat, faintly tinted surfaces instead of
+ *   stacking blur on blur.
+ * - One accent (brass). Status colours are always paired with a text label so
+ *   meaning never depends on colour alone.
+ * - Radius scale: 8px controls · 12px items · 16px panels. Nothing else.
+ */
+
+@theme {
+  --color-canvas: #0a0f1a;
+  --color-elevated: #101827;
+  --color-fg: #e7ebf2;
+  --color-fg-muted: #a3adbf;
+  --color-fg-subtle: #758199;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-line-strong: rgb(255 255 255 / 0.15);
+  --color-glass: rgb(255 255 255 / 0.04);
+  --color-tint: rgb(255 255 255 / 0.025);
+  --color-accent: #d6b06a;
+  --color-accent-strong: #e9c98b;
+  --color-accent-fg: #1b1508;
+  --color-accent-soft: rgb(214 176 106 / 0.12);
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #8ab4ff;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --font-display:
+    'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman',
+    serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --radius-control: 8px;
+  --radius-item: 12px;
+  --radius-panel: 16px;
+
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+
+  @keyframes shimmer {
+    0% {
+      background-position: -400px 0;
+    }
+    100% {
+      background-position: 400px 0;
+    }
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    padding: 0;
+    margin: 0;
+  }
+
+  body {
+    min-height: 100dvh;
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    /* A single, static light source at the top — gives the glass surfaces
+       something to refract without decorative blobs. */
+    background:
+      radial-gradient(1100px 520px at 12% -12%, rgb(214 176 106 / 0.07), transparent 62%),
+      radial-gradient(900px 480px at 100% -10%, rgb(110 150 220 / 0.08), transparent 60%),
+      var(--color-canvas);
+    background-attachment: fixed;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  ::selection {
+    background: rgb(214 176 106 / 0.35);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  select option {
+    background: var(--color-elevated);
+    color: var(--color-fg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* ---- Layout -------------------------------------------------------- */
+  .page {
+    margin-inline: auto;
+    width: 100%;
+    max-width: 72rem;
+    padding: 2rem 1rem 3rem;
+  }
+  @media (min-width: 640px) {
+    .page {
+      padding-inline: 1.5rem;
+    }
+  }
+  .page-narrow {
+    max-width: 46rem;
+  }
+  .page-form {
+    max-width: 28rem;
+  }
+  /* Centered single-card layout for auth / account pages. */
+  .auth-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: calc(100% - 2rem);
+    max-width: 28rem;
+    margin: 2.5rem auto 3rem;
+    padding: 1.75rem 1.5rem;
+  }
+  @media (min-width: 640px) {
+    .auth-card {
+      margin-top: 4rem;
+      padding: 2rem;
+    }
+  }
+
+  /* ---- Surfaces ------------------------------------------------------ */
+  .surface {
+    background: var(--color-glass);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+    backdrop-filter: blur(18px) saturate(140%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 12px 32px -18px rgb(0 0 0 / 0.7);
+  }
+  .surface-flat {
+    background: var(--color-tint);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-item);
+  }
+  .surface-interactive {
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease;
+  }
+  .surface-interactive:hover {
+    border-color: var(--color-line-strong);
+    background: rgb(255 255 255 / 0.05);
+  }
+
+  /* ---- Typography ---------------------------------------------------- */
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  .display {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+    color: var(--color-fg);
+  }
+  .muted {
+    color: var(--color-fg-muted);
+  }
+  .subtle {
+    color: var(--color-fg-subtle);
+  }
+  .link {
+    color: var(--color-accent-strong);
+    text-decoration: underline;
+    text-decoration-color: rgb(214 176 106 / 0.4);
+    text-underline-offset: 3px;
+  }
+  .link:hover {
+    text-decoration-color: var(--color-accent-strong);
+  }
+
+  /* ---- Buttons ------------------------------------------------------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-control);
+    border: 1px solid transparent;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      color 150ms ease;
+  }
+  .btn:disabled,
+  .btn[aria-disabled='true'] {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .btn-sm {
+    min-height: 2rem;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-accent-strong);
+  }
+  .btn-secondary {
+    background: rgb(255 255 255 / 0.05);
+    border-color: var(--color-line-strong);
+    color: var(--color-fg);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: rgb(255 255 255 / 0.09);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    color: var(--color-fg);
+    background: rgb(255 255 255 / 0.05);
+  }
+  .btn-danger {
+    background: rgb(248 113 113 / 0.12);
+    border-color: rgb(248 113 113 / 0.35);
+    color: #fecaca;
+  }
+
+  /* ---- Form controls ------------------------------------------------- */
+  .label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+  .hint {
+    font-size: 0.75rem;
+    color: var(--color-fg-subtle);
+  }
+  .input {
+    width: 100%;
+    min-height: 2.5rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--color-line-strong);
+    background: rgb(255 255 255 / 0.03);
+    color: var(--color-fg);
+    font-size: 0.875rem;
+    transition:
+      border-color 150ms ease,
+      box-shadow 150ms ease;
+  }
+  .input::placeholder {
+    color: var(--color-fg-subtle);
+  }
+  .input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgb(214 176 106 / 0.18);
+  }
+  .input[aria-invalid='true'] {
+    border-color: var(--color-danger);
+  }
+  .field-error {
+    font-size: 0.75rem;
+    color: var(--color-danger);
+  }
+
+  /* ---- Badges / status ---------------------------------------------- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line-strong);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--color-fg-muted);
+    white-space: nowrap;
+  }
+  .badge-ok {
+    color: #bbf7d0;
+    border-color: rgb(74 222 128 / 0.35);
+    background: rgb(74 222 128 / 0.08);
+  }
+  .badge-warn {
+    color: #fde68a;
+    border-color: rgb(251 191 36 / 0.35);
+    background: rgb(251 191 36 / 0.08);
+  }
+  .badge-danger {
+    color: #fecaca;
+    border-color: rgb(248 113 113 / 0.35);
+    background: rgb(248 113 113 / 0.08);
+  }
+  .badge-accent {
+    color: var(--color-accent-strong);
+    border-color: rgb(214 176 106 / 0.35);
+    background: var(--color-accent-soft);
+  }
+  .dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: currentColor;
+    flex: none;
+  }
+
+  /* ---- Feedback ------------------------------------------------------ */
+  .alert {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.8rem 1rem;
+    border-radius: var(--radius-item);
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-tint);
+    font-size: 0.875rem;
+  }
+  .alert-danger {
+    border-color: rgb(248 113 113 / 0.35);
+    background: rgb(248 113 113 / 0.07);
+  }
+  .alert-warn {
+    border-color: rgb(251 191 36 / 0.3);
+    background: rgb(251 191 36 / 0.06);
+  }
+  .skeleton {
+    border-radius: 6px;
+    background: linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.04) 0%,
+      rgb(255 255 255 / 0.09) 50%,
+      rgb(255 255 255 / 0.04) 100%
+    );
+    background-size: 800px 100%;
+    animation: var(--animate-shimmer);
+  }
+
+  /* ---- Tables -------------------------------------------------------- */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  .data-table th {
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-fg-subtle);
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .data-table td {
+    padding: 0.7rem 0.75rem;
+    border-bottom: 1px solid var(--color-line);
+    vertical-align: top;
+  }
+
+  /* ---- Long-form AI / legal text ------------------------------------- */
+  .prose-legal {
+    font-size: 0.925rem;
+    line-height: 1.65;
+    color: var(--color-fg);
+  }
+  .prose-legal p + p,
+  .prose-legal p + ul,
+  .prose-legal p + ol,
+  .prose-legal ul + p,
+  .prose-legal ol + p {
+    margin-top: 0.65rem;
+  }
+  .prose-legal ul,
+  .prose-legal ol {
+    padding-left: 1.2rem;
+  }
+  .prose-legal ul {
+    list-style: disc;
+  }
+  .prose-legal ol {
+    list-style: decimal;
+  }
+  .prose-legal li + li {
+    margin-top: 0.25rem;
+  }
+  .prose-legal h3 {
+    margin-top: 0.9rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+  .prose-legal strong {
+    font-weight: 650;
+    color: #fff;
+  }
+  .cite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.1rem;
+    margin-inline: 0.1rem;
+    padding: 0 0.25rem;
+    border-radius: 4px;
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-size: 0.68rem;
+    font-weight: 700;
+    vertical-align: 0.15em;
+    text-decoration: none;
+  }
+}

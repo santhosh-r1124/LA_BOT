@@ -1,67 +1,101 @@
 import { MANDATORY_DISCLAIMER } from '@legal-platform/shared';
 import Link from 'next/link';
 import { SystemStatus } from '@/components/system-status';
-import { env } from '@/lib/env';
+import { Disclaimer } from '@/components/ui';
 
-const PHASES = [
-  { n: 8, label: 'On-Demand Consultation' },
-  { n: 9, label: 'Advocate Portal' },
-  { n: 10, label: 'Payments' },
+const TOOLS = [
+  {
+    href: '/chat',
+    title: 'Legal chat',
+    body: 'Ask about Indian law in plain language. Answers are drawn only from indexed official sources and cite them.',
+    cta: 'Ask a question',
+  },
+  {
+    href: '/documents',
+    title: 'Document assistant',
+    body: 'Answer a short questionnaire to get a labelled draft plus notes on stamping, registration and review.',
+    cta: 'Start a draft',
+  },
+  {
+    href: '/advocates',
+    title: 'Advocate directory',
+    body: 'Find verified advocates by practice area, state, city and language when a matter needs a professional.',
+    cta: 'Browse advocates',
+  },
 ];
+
+const PIPELINE = [
+  ['Classify', 'Legal area, whether it depends on state law, and how urgent it is.'],
+  ['Retrieve', 'Hybrid keyword + semantic search over Acts from India Code and ministries.'],
+  ['Answer', 'The model may only use the retrieved passages, and must cite them.'],
+  ['Escalate', 'Disputes, notices and criminal matters are routed to an advocate.'],
+] as const;
 
 export default function HomePage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-6 py-16">
-      <header className="flex flex-col gap-2">
-        <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-          Phase 7 · Chat, documents &amp; advocate marketplace · {env.NEXT_PUBLIC_APP_ENV}
-        </span>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Indian Legal Advisor Bot &amp; Advocate Connect
-        </h1>
-        <p className="text-slate-600">
-          AI-grounded legal information over verified Indian sources, document drafting
-          assistance, and a path to qualified advocates when a matter needs professional help.
-        </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Link
-            href="/chat"
-            className="w-fit rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
-          >
-            Ask a legal question →
-          </Link>
-          <Link
-            href="/documents"
-            className="w-fit rounded-lg border border-blue-700 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
-          >
-            Draft a document →
-          </Link>
-          <Link
-            href="/advocates"
-            className="w-fit rounded-lg border border-blue-700 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
-          >
-            Find an advocate →
-          </Link>
-        </div>
-      </header>
+    <main className="page">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+        <section className="flex flex-col gap-5 pt-4">
+          <span className="eyebrow">Indian legal information · Not legal advice</span>
+          <h1 className="display max-w-2xl text-3xl sm:text-[2.6rem]">
+            Understand Indian law, and know when you need an advocate.
+          </h1>
+          <p className="muted max-w-xl">
+            Grounded answers from official Indian legal sources, document drafting guidance, and a
+            route to verified advocates for matters that need professional help.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/chat" className="btn btn-primary">
+              Ask a legal question
+            </Link>
+            <Link href="/documents" className="btn btn-secondary">
+              Draft a document
+            </Link>
+            <Link href="/advocates" className="btn btn-ghost">
+              Find an advocate
+            </Link>
+          </div>
+        </section>
 
-      <SystemStatus />
+        <SystemStatus />
+      </div>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-700">Coming in later phases</h2>
-        <ul className="mt-3 space-y-1.5 text-sm text-slate-600">
-          {PHASES.map((p) => (
-            <li key={p.n} className="flex gap-2">
-              <span className="font-mono text-xs text-slate-400">P{p.n}</span>
-              {p.label}
+      <section aria-labelledby="tools-heading" className="mt-14">
+        <h2 id="tools-heading" className="sr-only">
+          Tools
+        </h2>
+        <ul className="grid gap-3 md:grid-cols-3">
+          {TOOLS.map((tool) => (
+            <li key={tool.href}>
+              <Link
+                href={tool.href}
+                className="surface-flat surface-interactive flex h-full flex-col gap-2 p-5"
+              >
+                <span className="font-semibold">{tool.title}</span>
+                <span className="muted flex-1 text-sm">{tool.body}</span>
+                <span className="text-accent-strong mt-2 text-sm font-semibold">{tool.cta} →</span>
+              </Link>
             </li>
           ))}
         </ul>
       </section>
 
-      <footer className="mt-auto border-t border-slate-200 pt-4 text-xs leading-relaxed text-slate-500">
-        {MANDATORY_DISCLAIMER}
-      </footer>
+      <section aria-labelledby="how-heading" className="mt-14">
+        <h2 id="how-heading" className="display text-xl">
+          How an answer is produced
+        </h2>
+        <ol className="border-line bg-line mt-4 grid gap-px overflow-hidden rounded-xl border sm:grid-cols-2 lg:grid-cols-4">
+          {PIPELINE.map(([step, text], i) => (
+            <li key={step} className="bg-canvas/90 p-5">
+              <span className="text-fg-subtle font-mono text-xs">0{i + 1}</span>
+              <p className="mt-1 font-semibold">{step}</p>
+              <p className="muted mt-1 text-sm">{text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <Disclaimer text={MANDATORY_DISCLAIMER} />
     </main>
   );
 }

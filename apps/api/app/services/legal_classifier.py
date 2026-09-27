@@ -1,6 +1,6 @@
 """Legal query classification (Phase 2) + risk scoring (Phase 5).
 
-One forced Claude tool call assigns every message a legal `category`, a
+One structured model call assigns every message a legal `category`, a
 `jurisdiction_scope` hint, a `risk_level`, and whether it's `is_out_of_scope`
 at all. Risk is folded into the *same* call rather than a second one: Claude
 is already reading the message to judge category/jurisdiction, and asking it
@@ -16,11 +16,11 @@ classifies, it doesn't decide what to do with the classification.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from app.core.config import Settings
-from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger
-from app.services.anthropic_client import get_client
+from app.services.llm_provider import get_provider
 
 logger = get_logger("app.legal_classifier")
 
@@ -63,27 +63,24 @@ RISK_LEVELS = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
 # worse failure than an unnecessary nudge to consult one.
 _RISK_FALLBACK = "HIGH"
 
-_CLASSIFY_TOOL: dict[str, object] = {
-    "name": "classify_legal_query",
-    "description": "Record the classification of a message to an Indian legal-info assistant.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "category": {"type": "string", "enum": list(LEGAL_CATEGORIES)},
-            "jurisdiction_scope": {"type": "string", "enum": list(JURISDICTION_SCOPES)},
-            "risk_level": {"type": "string", "enum": list(RISK_LEVELS)},
-            "is_out_of_scope": {
-                "type": "boolean",
-                "description": "True only if the message has no connection to Indian law at all.",
-            },
+_SCHEMA_NAME = "classify_legal_query"
+_CLASSIFY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "category": {"type": "string", "enum": list(LEGAL_CATEGORIES)},
+        "jurisdiction_scope": {"type": "string", "enum": list(JURISDICTION_SCOPES)},
+        "risk_level": {"type": "string", "enum": list(RISK_LEVELS)},
+        "is_out_of_scope": {
+            "type": "boolean",
+            "description": "True only if the message has no connection to Indian law at all.",
         },
-        "required": ["category", "jurisdiction_scope", "risk_level", "is_out_of_scope"],
     },
+    "required": ["category", "jurisdiction_scope", "risk_level", "is_out_of_scope"],
 }
 
 _CLASSIFIER_SYSTEM_PROMPT = (
     "You triage messages for an Indian legal-information platform. Classify the "
-    "user's message by calling classify_legal_query.\n"
+    "user's message into the requested structured result.\n"
     "- `category`: the closest legal domain. Use ADVOCATE_REQUIRED for disputes, "
     "notices, or matters clearly needing professional representation; use "
     "DOCUMENT_GUIDANCE for questions about drafting/understanding a document.\n"
@@ -120,44 +117,34 @@ class Classification:
 
 
 async def classify_query(message: str, *, settings: Settings) -> Classification:
-    """One forced tool call — fast, cheap, and reliably structured."""
-    client = get_client(settings)
-    try:
-        # The tool/tool_choice shapes are built as plain dicts (see _CLASSIFY_TOOL)
-        # rather than the SDK's precise TypedDicts, so this doesn't match any
-        # overload statically — it's correct at runtime (the SDK validates it).
-        response = await client.messages.create(  # type: ignore[call-overload]
-            model=settings.llm_model,
-            max_tokens=settings.llm_classifier_max_tokens,
-            system=_CLASSIFIER_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": message}],
-            tools=[_CLASSIFY_TOOL],
-            tool_choice={"type": "tool", "name": "classify_legal_query"},
+    """One structured call — the provider returns JSON matching
+    ``_CLASSIFY_SCHEMA`` (tool call on Anthropic, JSON-schema output on
+    Gemini, JSON mode on OpenAI-compatible APIs). Every field is re-validated
+    here; anything missing or unexpected falls back to a safe default."""
+    provider = get_provider(settings)
+    data = await provider.complete_json(
+        system=_CLASSIFIER_SYSTEM_PROMPT,
+        message=message,
+        schema=_CLASSIFY_SCHEMA,
+        schema_name=_SCHEMA_NAME,
+        max_tokens=settings.llm_classifier_max_tokens,
+    )
+    if not data:
+        # Unparsable/empty structured output — fail safe (see _RISK_FALLBACK).
+        logger.warning("llm_classify_unparsable", provider=provider.name)
+        return Classification(
+            category="OUT_OF_SCOPE",
+            jurisdiction_scope="UNKNOWN",
+            risk_level=_RISK_FALLBACK,
+            is_out_of_scope=True,
         )
-    except Exception as exc:  # Anthropic SDK: network/auth/rate-limit/etc.
-        logger.warning("llm_classify_failed", error=str(exc))
-        raise ServiceUnavailableError(
-            "Could not reach the legal assistant. Please try again shortly.", code="llm_error"
-        ) from exc
 
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "classify_legal_query":
-            data = block.input if isinstance(block.input, dict) else {}
-            category = data.get("category")
-            scope = data.get("jurisdiction_scope")
-            risk = data.get("risk_level")
-            return Classification(
-                category=category if category in LEGAL_CATEGORIES else "OUT_OF_SCOPE",
-                jurisdiction_scope=scope if scope in JURISDICTION_SCOPES else "UNKNOWN",
-                risk_level=risk if risk in RISK_LEVELS else _RISK_FALLBACK,
-                is_out_of_scope=bool(data.get("is_out_of_scope", False)),
-            )
-
-    # The model didn't call the forced tool — shouldn't happen, fail safe.
-    logger.warning("llm_classify_no_tool_call")
+    category = data.get("category")
+    scope = data.get("jurisdiction_scope")
+    risk = data.get("risk_level")
     return Classification(
-        category="OUT_OF_SCOPE",
-        jurisdiction_scope="UNKNOWN",
-        risk_level=_RISK_FALLBACK,
-        is_out_of_scope=True,
+        category=category if category in LEGAL_CATEGORIES else "OUT_OF_SCOPE",
+        jurisdiction_scope=scope if scope in JURISDICTION_SCOPES else "UNKNOWN",
+        risk_level=risk if risk in RISK_LEVELS else _RISK_FALLBACK,
+        is_out_of_scope=bool(data.get("is_out_of_scope", False)),
     )

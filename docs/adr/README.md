@@ -15,6 +15,7 @@ decision, numbered sequentially. Status: `Proposed` → `Accepted` →
 | 0007 | Hybrid search via RRF (not a reranker model), retrieval-based grounding guardrail | Accepted |
 | 0008 | Risk scoring folded into the existing classification call, not a second LLM call | Accepted |
 | 0009 | Document Assistant: static questionnaire, not RAG-grounded, failures not persisted | Accepted |
+| 0010 | Provider-agnostic LLM layer (free providers first) and streamed chat | Accepted |
 
 ## Template
 

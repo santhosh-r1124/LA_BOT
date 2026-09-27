@@ -56,10 +56,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-16">
+    <main className="surface auth-card">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Register as an advocate</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="display text-2xl">Register as an advocate</h1>
+        <p className="text-fg-muted mt-1 text-sm">
           Your profile is reviewed before it goes live — you&apos;ll see the status on your
           dashboard.
         </p>
@@ -156,16 +156,20 @@ export default function RegisterPage() {
           </Field>
         </div>
 
-        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="field-error text-sm">
+            {error}
+          </p>
+        )}
 
         <button type="submit" disabled={submitting} className={buttonClass}>
           {submitting ? 'Registering…' : 'Register'}
         </button>
       </form>
 
-      <p className="text-center text-sm text-slate-600">
+      <p className="text-fg-muted text-center text-sm">
         Already registered?{' '}
-        <Link href="/login" className="font-medium text-teal-700 hover:underline">
+        <Link href="/login" className="link font-medium">
           Log in
         </Link>
       </p>

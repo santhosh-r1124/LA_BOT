@@ -33,12 +33,18 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
+os.environ.setdefault("AI_RATE_LIMIT_PER_MINUTE", "0")
+# No model provider configured unless a test opts in — keeps the suite
+# offline and makes the "not configured" paths deterministic.
+os.environ.setdefault("LLM_PROVIDER", "auto")
+for _key in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "OLLAMA_BASE_URL"):
+    os.environ.setdefault(_key, "")
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-use-0123456789")
 
 
 def unique_email(prefix: str = "test") -> str:
     """A collision-free email for tests that don't use the transactional fixture."""
-    return f"{prefix}-{uuid.uuid4().hex[:12]}@example.test"
+    return f"{prefix}-{uuid.uuid4().hex[:12]}@example.com"
 
 
 @pytest.fixture
@@ -55,9 +61,13 @@ def app() -> Iterator[object]:
 async def client(app: object) -> AsyncIterator[object]:
     from httpx import ASGITransport, AsyncClient
 
+    from app.db.session import dispose_engine
+
     transport = ASGITransport(app=app)  # type: ignore[arg-type]
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
+    # e.g. /health/ready opens a pooled DB connection on this test's loop.
+    await dispose_engine()
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +78,7 @@ async def client(app: object) -> AsyncIterator[object]:
 async def _db_reachable() -> bool:
     from sqlalchemy import text
 
-    from app.db.session import get_sessionmaker
+    from app.db.session import dispose_engine, get_sessionmaker
 
     try:
         async with get_sessionmaker()() as session:
@@ -76,6 +86,11 @@ async def _db_reachable() -> bool:
         return True
     except Exception:
         return False
+    finally:
+        # The probe runs under its own ``asyncio.run`` loop; pooled asyncpg
+        # connections are bound to that loop, so drop them before the tests'
+        # loops try to reuse them ("attached to a different loop").
+        await dispose_engine()
 
 
 @pytest.fixture(scope="session")
@@ -88,15 +103,20 @@ async def db_conn(db_available: bool):
     if not db_available:
         pytest.skip("Postgres not reachable — start it with `pnpm stack:up` to run this test.")
 
-    from app.db.session import get_engine
+    from app.db.session import dispose_engine, get_engine
 
     engine = get_engine()
-    async with engine.connect() as connection:
-        trans = await connection.begin()
-        try:
-            yield connection
-        finally:
-            await trans.rollback()
+    try:
+        async with engine.connect() as connection:
+            trans = await connection.begin()
+            try:
+                yield connection
+            finally:
+                await trans.rollback()
+    finally:
+        # pytest-asyncio gives each test its own event loop; pooled connections
+        # must not outlive the loop that created them.
+        await dispose_engine()
 
 
 @pytest.fixture

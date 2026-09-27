@@ -63,8 +63,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-dev-only}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Model provider — see docs/api-inventory.md. "auto" picks the first
+      # configured of gemini -> groq -> ollama -> anthropic.
+      LLM_PROVIDER: ${LLM_PROVIDER:-auto}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_LLM_MODEL: ${GEMINI_LLM_MODEL:-gemini-3.5-flash}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      # Ollama on the host machine, reached from inside the container:
+      #   OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_RATE_LIMIT_PER_MINUTE: ${AI_RATE_LIMIT_PER_MINUTE:-20}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:

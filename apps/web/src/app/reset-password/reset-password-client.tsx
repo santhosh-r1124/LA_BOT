@@ -36,7 +36,7 @@ function RequestResetLink() {
   if (sent) {
     return (
       <Wrap title="Check your email">
-        <p className="text-sm text-slate-600">
+        <p className="text-fg-muted text-sm">
           If an account exists for <strong>{email}</strong>, a password reset link is on its way.
         </p>
       </Wrap>
@@ -79,9 +79,7 @@ function SetNewPassword({ token }: { token: string }) {
       setDone(true);
     } catch (err) {
       setError(
-        err instanceof ApiRequestError
-          ? err.message
-          : 'This link is invalid or has expired.',
+        err instanceof ApiRequestError ? err.message : 'This link is invalid or has expired.',
       );
     } finally {
       setSubmitting(false);
@@ -91,7 +89,7 @@ function SetNewPassword({ token }: { token: string }) {
   if (done) {
     return (
       <Wrap title="Password updated">
-        <p className="text-sm text-slate-600">You can now log in with your new password.</p>
+        <p className="text-fg-muted text-sm">You can now log in with your new password.</p>
         <Link href="/login" className={`${buttonClass} mx-auto w-fit`}>
           Log in
         </Link>
@@ -113,7 +111,11 @@ function SetNewPassword({ token }: { token: string }) {
             className={inputClass}
           />
         </Field>
-        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="field-error text-sm">
+            {error}
+          </p>
+        )}
         <button type="submit" disabled={submitting} className={buttonClass}>
           {submitting ? 'Saving…' : 'Save new password'}
         </button>
@@ -124,8 +126,8 @@ function SetNewPassword({ token }: { token: string }) {
 
 function Wrap({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6 py-16 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+    <main className="surface auth-card text-center">
+      <h1 className="display text-2xl">{title}</h1>
       <div className="text-left">{children}</div>
     </main>
   );

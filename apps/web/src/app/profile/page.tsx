@@ -66,23 +66,23 @@ export default function ProfilePage() {
   }
 
   if (loading || !user) {
-    return <main className="flex min-h-screen items-center justify-center text-slate-500">Loading…</main>;
+    return (
+      <main className="text-fg-muted flex min-h-screen items-center justify-center">Loading…</main>
+    );
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col gap-6 px-6 py-16">
+    <main className="surface auth-card">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Your profile</h1>
-          <p className="mt-1 text-sm text-slate-600">{user.email}</p>
+          <h1 className="display text-2xl">Your profile</h1>
+          <p className="text-fg-muted mt-1 text-sm">{user.email}</p>
         </div>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-          {user.role}
-        </span>
+        <span className="badge">{user.role}</span>
       </div>
 
       {!user.email_verified && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="alert alert-warn block">
           <p>Your email isn&apos;t verified yet.</p>
           <button
             type="button"
@@ -122,24 +122,32 @@ export default function ProfilePage() {
           />
         </Field>
 
-        {error && <p className="text-sm text-rose-600">{error}</p>}
-        {saved && <p className="text-sm text-emerald-600">Saved.</p>}
+        {error && (
+          <p role="alert" className="field-error text-sm">
+            {error}
+          </p>
+        )}
+        {saved && (
+          <p role="status" className="text-ok text-sm">
+            Saved.
+          </p>
+        )}
 
         <div className="flex gap-3">
           <button type="submit" disabled={saving} className={buttonClass}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
-          <button
-            type="button"
-            onClick={() => void refreshUser()}
-            className={secondaryButtonClass}
-          >
+          <button type="button" onClick={() => void refreshUser()} className={secondaryButtonClass}>
             Refresh
           </button>
         </div>
       </form>
 
-      <button type="button" onClick={() => void onLogout()} className={`${secondaryButtonClass} mt-auto`}>
+      <button
+        type="button"
+        onClick={() => void onLogout()}
+        className={`${secondaryButtonClass} mt-auto`}
+      >
         Log out
       </button>
     </main>

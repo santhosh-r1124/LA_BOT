@@ -37,10 +37,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6 py-16">
+    <main className="surface auth-card">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="display text-2xl">Create an account</h1>
+        <p className="text-fg-muted mt-1 text-sm">
           Free — ask legal questions, generate document guidance, and find an advocate.
         </p>
       </div>
@@ -85,16 +85,20 @@ export default function RegisterPage() {
           />
         </Field>
 
-        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="field-error text-sm">
+            {error}
+          </p>
+        )}
 
         <button type="submit" disabled={submitting} className={buttonClass}>
           {submitting ? 'Creating account…' : 'Create account'}
         </button>
       </form>
 
-      <p className="text-center text-sm text-slate-600">
+      <p className="text-fg-muted text-center text-sm">
         Already have an account?{' '}
-        <Link href="/login" className="font-medium text-blue-700 hover:underline">
+        <Link href="/login" className="link font-medium">
           Log in
         </Link>
       </p>

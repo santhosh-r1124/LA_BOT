@@ -116,6 +116,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
             request_id=_request_id(request),
             details=exc.details,
         ),
+        headers=getattr(exc, "headers", None),
     )
 
 

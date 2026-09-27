@@ -1,13 +1,22 @@
-"""Service metadata — safe, unauthenticated, used by the frontends."""
+"""Service metadata + capability status — safe, unauthenticated, used by the
+frontends to show *real* availability instead of assuming features work."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter
 from pydantic import BaseModel
+from sqlalchemy import func, select
 
-from app.api.deps import SettingsDep
+from app.api.deps import DbSession, SettingsDep
+from app.core.logging import get_logger
+from app.models.legal_document import IngestionStatus, LegalDocument
+from app.models.user import AdvocateProfile, VerificationStatus
+from app.services.llm_provider import describe_provider
 
 router = APIRouter()
+logger = get_logger("app.meta")
 
 
 class MetaResponse(BaseModel):
@@ -22,4 +31,100 @@ async def read_meta(settings: SettingsDep) -> MetaResponse:
         name=settings.app_name,
         version=settings.version,
         environment=settings.app_env.value,
+    )
+
+
+class LLMStatus(BaseModel):
+    configured: bool
+    provider: str | None
+    model: str | None
+    is_free_tier: bool | None
+
+
+class EmbeddingStatus(BaseModel):
+    configured: bool
+    model: str | None
+
+
+class KnowledgeBaseStatus(BaseModel):
+    available: bool
+    """False when the database couldn't be queried — counts are then null."""
+    documents_indexed: int | None
+    documents_failed: int | None
+    chunks_indexed: int | None
+    last_indexed_at: datetime | None
+
+
+class DirectoryStatus(BaseModel):
+    available: bool
+    verified_advocates: int | None
+
+
+class StatusResponse(BaseModel):
+    """Every field is read from configuration or the database at request
+    time — nothing here is a placeholder. ``configured`` means a key/URL is
+    set; it does not prove the upstream provider is currently reachable
+    (checking that would spend free-tier quota on every page view)."""
+
+    generated_at: datetime
+    llm: LLMStatus
+    embeddings: EmbeddingStatus
+    knowledge_base: KnowledgeBaseStatus
+    advocate_directory: DirectoryStatus
+
+
+@router.get("/status", response_model=StatusResponse, summary="Feature availability (no secrets)")
+async def read_status(settings: SettingsDep, db: DbSession) -> StatusResponse:
+    info = describe_provider(settings)
+
+    kb = KnowledgeBaseStatus(
+        available=False,
+        documents_indexed=None,
+        documents_failed=None,
+        chunks_indexed=None,
+        last_indexed_at=None,
+    )
+    directory = DirectoryStatus(available=False, verified_advocates=None)
+    try:
+        completed = LegalDocument.ingestion_status == IngestionStatus.COMPLETED
+        row = (
+            await db.execute(
+                select(
+                    func.count().filter(completed),
+                    func.count().filter(LegalDocument.ingestion_status == IngestionStatus.FAILED),
+                    func.coalesce(func.sum(LegalDocument.chunk_count).filter(completed), 0),
+                    func.max(LegalDocument.updated_at).filter(completed),
+                )
+            )
+        ).one()
+        kb = KnowledgeBaseStatus(
+            available=True,
+            documents_indexed=int(row[0]),
+            documents_failed=int(row[1]),
+            chunks_indexed=int(row[2]),
+            last_indexed_at=row[3],
+        )
+        verified = await db.scalar(
+            select(func.count())
+            .select_from(AdvocateProfile)
+            .where(AdvocateProfile.verification_status == VerificationStatus.VERIFIED)
+        )
+        directory = DirectoryStatus(available=True, verified_advocates=int(verified or 0))
+    except Exception as exc:  # report, don't 500 — the page shows "unavailable"
+        logger.warning("status_db_query_failed", error_type=type(exc).__name__)
+
+    return StatusResponse(
+        generated_at=datetime.now(UTC),
+        llm=LLMStatus(
+            configured=info.configured,
+            provider=info.provider,
+            model=info.model,
+            is_free_tier=info.is_free_tier,
+        ),
+        embeddings=EmbeddingStatus(
+            configured=bool(settings.gemini_api_key),
+            model=settings.embedding_model if settings.gemini_api_key else None,
+        ),
+        knowledge_base=kb,
+        advocate_directory=directory,
     )

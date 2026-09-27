@@ -1,4 +1,6 @@
-import { apiFetch } from './api-client';
+import { isApiError } from '@legal-platform/shared';
+import { apiFetch, ApiRequestError } from './api-client';
+import { env } from './env';
 
 export interface SourceOut {
   document_id: string;
@@ -45,6 +47,111 @@ export interface ConversationDetail {
   messages: ChatMessageOut[];
 }
 
+/** First event of a streamed reply: the turn's classification + sources. */
+export interface StreamStart {
+  conversation_id: string;
+  legal_category: string;
+  jurisdiction_scope: string;
+  risk_level: ChatMessageOut['risk_level'];
+  is_out_of_scope: boolean;
+  sources: SourceOut[] | null;
+}
+
+export interface StreamHandlers {
+  onStart?: (start: StreamStart) => void;
+  onDelta?: (text: string) => void;
+  signal?: AbortSignal;
+}
+
+/** Split an SSE buffer into complete `event:`/`data:` frames. */
+export function parseSseFrames(buffer: string): {
+  frames: Array<{ event: string; data: string }>;
+  rest: string;
+} {
+  const frames: Array<{ event: string; data: string }> = [];
+  const parts = buffer.split('\n\n');
+  const rest = parts.pop() ?? '';
+  for (const part of parts) {
+    let event = 'message';
+    const data: string[] = [];
+    for (const line of part.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+    }
+    if (data.length > 0) frames.push({ event, data: data.join('\n') });
+  }
+  return { frames, rest };
+}
+
+/**
+ * POST `/api/v1/chat/messages/stream` and consume its Server-Sent Events.
+ * Resolves with the persisted turn (the `done` event); rejects with
+ * {@link ApiRequestError} for HTTP errors *and* for an in-stream `error`
+ * event, so callers handle both the same way.
+ */
+export async function streamMessage(
+  message: string,
+  conversationId: string | null,
+  token: string | null,
+  handlers: StreamHandlers = {},
+): Promise<SendMessageResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/api/v1/chat/messages/stream`, {
+      method: 'POST',
+      signal: handlers.signal,
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ message, conversation_id: conversationId ?? undefined }),
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err;
+    throw new ApiRequestError(0, 'network_error', 'Could not reach the API.');
+  }
+
+  if (!response.ok || !response.body) {
+    const payload: unknown = await response.json().catch(() => null);
+    if (isApiError(payload)) {
+      throw new ApiRequestError(
+        response.status,
+        payload.error.code,
+        payload.error.message,
+        payload.error.request_id,
+      );
+    }
+    throw new ApiRequestError(
+      response.status,
+      'http_error',
+      `Request failed (${response.status}).`,
+    );
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const { frames, rest } = parseSseFrames(buffer);
+    buffer = rest;
+    for (const frame of frames) {
+      const data: unknown = JSON.parse(frame.data);
+      if (frame.event === 'start') handlers.onStart?.(data as StreamStart);
+      else if (frame.event === 'delta') handlers.onDelta?.((data as { text: string }).text);
+      else if (frame.event === 'done') return data as SendMessageResponse;
+      else if (frame.event === 'error') {
+        const { code, message: msg } = data as { code: string; message: string };
+        throw new ApiRequestError(503, code, msg);
+      }
+    }
+  }
+  throw new ApiRequestError(0, 'stream_interrupted', 'The response was interrupted. Try again.');
+}
+
 /** Bindings for `/api/v1/chat/*`. Works with or without a token (public tier). */
 export const chatClient = {
   sendMessage: (message: string, conversationId: string | null, token: string | null) =>
@@ -52,7 +159,12 @@ export const chatClient = {
       method: 'POST',
       body: { message, conversation_id: conversationId ?? undefined },
       token,
+      // Classification + retrieval + generation can legitimately take a while
+      // on free-tier models; the old 10s default aborted slow-but-fine replies.
+      timeoutMs: 120_000,
     }),
+
+  streamMessage,
 
   listConversations: (token: string) =>
     apiFetch<ConversationSummary[]>('/api/v1/chat/conversations', { token }),

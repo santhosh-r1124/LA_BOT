@@ -3,30 +3,57 @@
 import { INDIAN_STATES, LEGAL_CATEGORIES, MANDATORY_DISCLAIMER } from '@legal-platform/shared';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { Disclaimer, EmptyState, ErrorState, PageHeader } from '@/components/ui';
 import { ApiRequestError } from '@/lib/api-client';
 import {
   advocateClient,
   type AdvocateDirectoryEntry,
   type AdvocateSearchFilters,
 } from '@/lib/advocate-client';
+import { formatEnumLabel, formatInr } from '@/lib/format';
 
-function formatCategoryLabel(category: string): string {
-  return category
-    .split('_')
-    .map((w) => w[0] + w.slice(1).toLowerCase())
-    .join(' ');
+const PAGE_SIZE = 20;
+const TEXT_DEBOUNCE_MS = 350;
+
+/** Returns `value` only after it has been stable for `delay` ms. */
+function useDebounced<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
 }
 
-const EMPTY_FILTERS: AdvocateSearchFilters = {};
-
 export default function AdvocatesPage() {
-  const [filters, setFilters] = useState<AdvocateSearchFilters>(EMPTY_FILTERS);
+  const [practiceArea, setPracticeArea] = useState('');
+  const [stateCode, setStateCode] = useState('');
+  const [city, setCity] = useState('');
+  const [language, setLanguage] = useState('');
+  const [offset, setOffset] = useState(0);
   const [results, setResults] = useState<AdvocateDirectoryEntry[] | null>(null);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+
+  // Text inputs are debounced so typing "Chennai" is one request, not seven.
+  const debouncedCity = useDebounced(city.trim(), TEXT_DEBOUNCE_MS);
+  const debouncedLanguage = useDebounced(language.trim(), TEXT_DEBOUNCE_MS);
 
   useEffect(() => {
+    setOffset(0);
+  }, [practiceArea, stateCode, debouncedCity, debouncedLanguage]);
+
+  useEffect(() => {
+    const filters: AdvocateSearchFilters = {
+      practice_area: practiceArea || undefined,
+      state_code: stateCode || undefined,
+      city: debouncedCity || undefined,
+      language: debouncedLanguage || undefined,
+      limit: PAGE_SIZE,
+      offset,
+    };
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -37,10 +64,12 @@ export default function AdvocatesPage() {
         setResults(res.items);
         setTotal(res.total);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (cancelled) return;
         setError(
-          err instanceof ApiRequestError ? err.message : 'Could not load advocates. Try again.',
+          err instanceof ApiRequestError && err.code !== 'network_error'
+            ? err.message
+            : 'The advocate directory is unreachable right now.',
         );
       })
       .finally(() => {
@@ -49,106 +78,201 @@ export default function AdvocatesPage() {
     return () => {
       cancelled = true;
     };
-  }, [filters]);
+  }, [practiceArea, stateCode, debouncedCity, debouncedLanguage, offset, nonce]);
 
-  function updateFilter<K extends keyof AdvocateSearchFilters>(
-    key: K,
-    value: AdvocateSearchFilters[K],
-  ) {
-    setFilters((prev) => ({ ...prev, [key]: value || undefined }));
-  }
+  const hasFilters = Boolean(practiceArea || stateCode || city || language);
+  const clearFilters = () => {
+    setPracticeArea('');
+    setStateCode('');
+    setCity('');
+    setLanguage('');
+  };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-6">
-      <header className="mb-4">
-        <h1 className="text-xl font-semibold tracking-tight">Find an Advocate</h1>
-        <p className="text-xs text-slate-500">
-          Browse verified advocates by practice area, location and language.
-        </p>
-      </header>
+    <main className="page">
+      <PageHeader
+        eyebrow="Advocate directory"
+        title="Find a verified advocate"
+        description="Only advocates whose enrolment has been verified by the platform are listed. Filter by practice area, location and language."
+      />
 
-      <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-4">
-        <select
-          value={filters.practice_area ?? ''}
-          onChange={(e) => updateFilter('practice_area', e.target.value)}
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-        >
-          <option value="">Any practice area</option>
-          {LEGAL_CATEGORIES.filter((c) => c !== 'OUT_OF_SCOPE').map((c) => (
-            <option key={c} value={c}>
-              {formatCategoryLabel(c)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filters.state_code ?? ''}
-          onChange={(e) => updateFilter('state_code', e.target.value)}
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-        >
-          <option value="">Any state</option>
-          {INDIAN_STATES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <input
-          placeholder="City"
-          value={filters.city ?? ''}
-          onChange={(e) => updateFilter('city', e.target.value)}
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-        />
-        <input
-          placeholder="Language (e.g. hi)"
-          value={filters.language ?? ''}
-          onChange={(e) => updateFilter('language', e.target.value)}
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-        />
+      <form
+        role="search"
+        aria-label="Filter advocates"
+        className="surface mb-6 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]"
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <div className="flex flex-col gap-1">
+          <label htmlFor="f-area" className="hint">
+            Practice area
+          </label>
+          <select
+            id="f-area"
+            value={practiceArea}
+            onChange={(e) => setPracticeArea(e.target.value)}
+            className="input"
+          >
+            <option value="">Any</option>
+            {LEGAL_CATEGORIES.filter((c) => c !== 'OUT_OF_SCOPE').map((c) => (
+              <option key={c} value={c}>
+                {formatEnumLabel(c)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="f-state" className="hint">
+            State / UT
+          </label>
+          <select
+            id="f-state"
+            value={stateCode}
+            onChange={(e) => setStateCode(e.target.value)}
+            className="input"
+          >
+            <option value="">Any</option>
+            {INDIAN_STATES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="f-city" className="hint">
+            City
+          </label>
+          <input
+            id="f-city"
+            placeholder="e.g. Chennai"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            className="input"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="f-lang" className="hint">
+            Language code
+          </label>
+          <input
+            id="f-lang"
+            placeholder="e.g. ta, hi, en"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="input"
+          />
+        </div>
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasFilters}
+            className="btn btn-ghost w-full"
+          >
+            Clear
+          </button>
+        </div>
+      </form>
+
+      <div aria-live="polite" aria-busy={loading}>
+        {error ? (
+          <ErrorState
+            title="Couldn't load advocates"
+            message={error}
+            onRetry={() => setNonce((n) => n + 1)}
+          />
+        ) : loading && results === null ? (
+          <div className="grid gap-3 md:grid-cols-2" role="status">
+            <span className="sr-only">Loading advocates</span>
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="skeleton h-28" />
+            ))}
+          </div>
+        ) : results && results.length > 0 ? (
+          <>
+            <p className="muted mb-3 text-sm">
+              {total} verified advocate{total === 1 ? '' : 's'}
+              {hasFilters ? ' match your filters' : ''}
+              {loading && ' · updating…'}
+            </p>
+            <ul className={`grid gap-3 md:grid-cols-2 ${loading ? 'opacity-60' : ''}`}>
+              {results.map((a) => {
+                const fee = formatInr(a.consultation_fee);
+                return (
+                  <li key={a.id}>
+                    <Link
+                      href={`/advocates/${a.id}`}
+                      className="surface-flat surface-interactive flex h-full flex-col gap-2 p-4"
+                    >
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="font-semibold">{a.display_name || 'Advocate'}</span>
+                        {fee && <span className="muted text-sm">{fee}</span>}
+                      </div>
+                      <p className="muted text-sm">
+                        {a.city}, {a.state_code}
+                        {a.experience_years != null && ` · ${a.experience_years} yrs`}
+                        {a.languages.length > 0 && ` · ${a.languages.join(', ')}`}
+                      </p>
+                      {a.practice_areas.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {a.practice_areas.slice(0, 4).map((p) => (
+                            <span key={p} className="badge">
+                              {formatEnumLabel(p)}
+                            </span>
+                          ))}
+                          {a.practice_areas.length > 4 && (
+                            <span className="badge">+{a.practice_areas.length - 4}</span>
+                          )}
+                        </div>
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            {total > PAGE_SIZE && (
+              <nav aria-label="Pagination" className="mt-5 flex items-center justify-between">
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={offset === 0 || loading}
+                  onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+                >
+                  Previous
+                </button>
+                <span className="muted text-sm">
+                  {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={offset + PAGE_SIZE >= total || loading}
+                  onClick={() => setOffset((o) => o + PAGE_SIZE)}
+                >
+                  Next
+                </button>
+              </nav>
+            )}
+          </>
+        ) : (
+          <EmptyState
+            title={hasFilters ? 'No advocates match those filters' : 'No verified advocates yet'}
+            action={
+              hasFilters ? (
+                <button type="button" onClick={clearFilters} className="btn btn-secondary btn-sm">
+                  Clear filters
+                </button>
+              ) : undefined
+            }
+          >
+            {hasFilters
+              ? 'Try a broader practice area or remove the city filter.'
+              : 'Advocates appear here once they register on the advocate portal and their enrolment is verified.'}
+          </EmptyState>
+        )}
       </div>
 
-      {error && <p className="mb-3 text-sm text-rose-600">{error}</p>}
-
-      {loading ? (
-        <p className="text-sm text-slate-500">Loading advocates…</p>
-      ) : results && results.length > 0 ? (
-        <>
-          <p className="mb-2 text-xs text-slate-500">{total} advocate(s) found</p>
-          <ul className="flex flex-col gap-3">
-            {results.map((a) => (
-              <li key={a.id}>
-                <Link
-                  href={`/advocates/${a.id}`}
-                  className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-blue-500"
-                >
-                  <div className="flex items-baseline justify-between">
-                    <span className="font-medium text-slate-800">
-                      {a.display_name || 'Advocate'}
-                    </span>
-                    {a.consultation_fee && (
-                      <span className="text-xs text-slate-500">₹{a.consultation_fee}</span>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {a.city}, {a.state_code}
-                    {a.experience_years != null && ` · ${a.experience_years} yrs experience`}
-                  </p>
-                  {a.practice_areas.length > 0 && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      {a.practice_areas.map(formatCategoryLabel).join(', ')}
-                    </p>
-                  )}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p className="text-sm text-slate-500">No advocates match those filters yet.</p>
-      )}
-
-      <p className="mt-6 text-center text-xs leading-relaxed text-slate-400">
-        {MANDATORY_DISCLAIMER}
-      </p>
+      <Disclaimer text={MANDATORY_DISCLAIMER} />
     </main>
   );
 }

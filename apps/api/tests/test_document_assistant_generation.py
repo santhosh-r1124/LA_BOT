@@ -9,10 +9,20 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import ServiceUnavailableError
 from app.models.document_request import AssistantDocumentType
+from app.services import anthropic_client
 from app.services.document_assistant import generation
 
-UNCONFIGURED = Settings(anthropic_api_key=None)
-CONFIGURED = Settings(anthropic_api_key="fake-key-for-tests")
+# Every provider unset -> "auto" resolves to nothing -> llm_not_configured.
+UNCONFIGURED = Settings(
+    llm_provider="auto",
+    anthropic_api_key=None,
+    gemini_api_key=None,
+    groq_api_key=None,
+    ollama_base_url=None,
+)
+# These tests drive the Anthropic provider with a fake SDK client; the other
+# providers are covered in tests/test_llm_provider.py.
+CONFIGURED = Settings(llm_provider="anthropic", anthropic_api_key="fake-key-for-tests")
 
 SAMPLE_ANSWERS = {
     "purpose": "Name change",
@@ -68,7 +78,7 @@ async def test_generate_draft_raises_when_not_configured() -> None:
 
 async def test_generate_draft_returns_text(monkeypatch: pytest.MonkeyPatch) -> None:
     response = _FakeResponse([_FakeTextBlock("DRAFT AFFIDAVIT\n\n...")])
-    monkeypatch.setattr(generation, "get_client", lambda settings: _FakeClient(response))
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _FakeClient(response))
 
     text = await generation.generate_draft(
         AssistantDocumentType.AFFIDAVIT, answers=SAMPLE_ANSWERS, settings=CONFIGURED
@@ -78,7 +88,9 @@ async def test_generate_draft_returns_text(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 async def test_generate_draft_raises_on_empty_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(generation, "get_client", lambda settings: _FakeClient(_FakeResponse([])))
+    monkeypatch.setattr(
+        anthropic_client, "get_client", lambda settings: _FakeClient(_FakeResponse([]))
+    )
 
     with pytest.raises(ServiceUnavailableError) as exc_info:
         await generation.generate_draft(
@@ -88,7 +100,7 @@ async def test_generate_draft_raises_on_empty_response(monkeypatch: pytest.Monke
 
 
 async def test_generate_draft_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(generation, "get_client", lambda settings: _RaisingClient())
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _RaisingClient())
 
     with pytest.raises(ServiceUnavailableError) as exc_info:
         await generation.generate_draft(
@@ -111,7 +123,7 @@ async def test_generate_draft_only_includes_answered_questions_in_the_prompt(
         def __init__(self) -> None:
             self.messages = _CapturingMessages()
 
-    monkeypatch.setattr(generation, "get_client", lambda settings: _CapturingClient())
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _CapturingClient())
 
     await generation.generate_draft(
         AssistantDocumentType.AFFIDAVIT,

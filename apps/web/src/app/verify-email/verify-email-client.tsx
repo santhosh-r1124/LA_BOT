@@ -33,13 +33,13 @@ export function VerifyEmailClient() {
   }, [token]);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-4 px-6 py-16 text-center">
-      {status === 'verifying' && <p className="text-slate-600">Verifying your email…</p>}
+    <main className="surface auth-card text-center">
+      {status === 'verifying' && <p className="text-fg-muted">Verifying your email…</p>}
 
       {status === 'success' && (
         <>
-          <h1 className="text-xl font-semibold text-emerald-700">Email verified</h1>
-          <p className="text-sm text-slate-600">You&apos;re all set.</p>
+          <h1 className="text-ok text-xl font-semibold">Email verified</h1>
+          <p className="text-fg-muted text-sm">You&apos;re all set.</p>
           <Link href="/profile" className={`${buttonClass} mx-auto w-fit`}>
             Go to your profile
           </Link>
@@ -48,11 +48,11 @@ export function VerifyEmailClient() {
 
       {(status === 'error' || status === 'missing-token') && (
         <>
-          <h1 className="text-xl font-semibold text-rose-700">Couldn&apos;t verify email</h1>
-          <p className="text-sm text-slate-600">
+          <h1 className="text-danger text-xl font-semibold">Couldn&apos;t verify email</h1>
+          <p className="text-fg-muted text-sm">
             {message ?? 'This link is missing or invalid. Request a new one from your profile.'}
           </p>
-          <Link href="/login" className="text-sm font-medium text-blue-700 hover:underline">
+          <Link href="/login" className="link text-sm font-medium">
             Back to login
           </Link>
         </>

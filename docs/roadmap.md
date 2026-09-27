@@ -206,6 +206,27 @@ deliverable and builds on the previous one.
   `/advocates/[id]` (profile view) — read-only; booking a consultation is
   Phase 8, so the profile page says so rather than showing a dead button.
 
+## Upgrade — free providers, streaming, design system (2026-09-27)
+
+- **Free-only AI stack**: provider layer (`app/services/llm_provider.py`)
+  with Gemini (default, same free key as embeddings), Groq, Ollama and
+  optional Anthropic — [ADR 0010](adr/0010-free-llm-providers-and-streaming.md),
+  [API inventory](api-inventory.md).
+- **Knowledge-base seeding**: catalogue of 15 official Acts
+  (`official_sources.py`) + `pnpm kb:seed`.
+- **Streaming chat** (`POST /chat/messages/stream`, SSE) with stop/retry.
+- **`GET /api/v1/status`**: real provider/corpus/directory availability for
+  the UI (no placeholders).
+- **Quota protection**: per-client rate limit on AI endpoints, query-embedding
+  cache, 429 backoff for ingestion.
+- **UI**: shared dark glass design system across both apps; responsive and
+  keyboard/screen-reader friendly; skeleton, empty and error states.
+- **Fixes**: `message_role` enum persisted names instead of values (chat
+  inserts failed on Postgres); web client's 10s timeout aborted normal
+  AI requests; test-suite event-loop leak.
+
+Per-feature status: [project-status.md](project-status.md).
+
 ## MVP scope (Phase 16)
 
 Consumer Legal Chat · Legal Document Assistant · Advocate Search · Consultation

@@ -37,7 +37,7 @@ shape; components fill in over later phases.
              │  risk-engine · notifications               │
              └───────────────┬────────────────────────────┘
                              ▼
-                    Anthropic Claude  +  verified Indian legal sources
+                    LLM provider (Gemini / Groq / Ollama / Claude)  +  verified Indian legal sources
 ```
 
 ## 2. Request/response flow
@@ -45,7 +45,7 @@ shape; components fill in over later phases.
 **Phase 2 (current, `apps/api/app/services/llm.py`)** — no retrieval yet:
 
 ```
-query → classify (Claude, forced tool call: category, jurisdiction, in/out of scope)
+query → classify (LLM, schema-constrained output: category, jurisdiction, in/out of scope)
       → if out of scope: fixed reply, stop
       → else: Claude generates a general answer, told to defer to an advocate
               rather than invent specifics
@@ -62,7 +62,7 @@ query
   → hybrid search  (keyword via pg_trgm  +  vector via pgvector)
   → reranking
   → context selection
-  → Claude
+  → LLM (streamed to the UI over SSE)
   → legal guardrails                   (services/risk-engine + rules)
   → answer + citations   (or INSUFFICIENT_EVIDENCE_MESSAGE)
 ```
@@ -90,7 +90,7 @@ See the table in the root [`README.md`](../README.md#monorepo-layout). Principle
 | Migrations    | Alembic                       | Autogenerate against ORM metadata; datastore-agnostic         |
 | DB            | PostgreSQL + pgvector         | One store for relational + vector; `pg_trgm` for keyword search |
 | Cache/queue   | Redis                         | Sessions, rate limits, job signalling                         |
-| LLM           | Anthropic Claude              | Grounded generation with strong instruction-following         |
+| LLM           | Provider layer: Gemini (free, default) · Groq · Ollama · Claude (ADR 0010) | Grounded generation; free providers first         |
 | Logging       | structlog                     | Structured, contextual (request-id), console↔JSON by env      |
 | JS monorepo   | pnpm + Turborepo              | Efficient installs, cached task graph                         |
 | Python deps   | uv                            | Fast, reproducible, lockfile-first                            |

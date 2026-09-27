@@ -56,7 +56,16 @@ class ChatMessage(Base):
         PGUUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[MessageRole] = mapped_column(
-        SAEnum(MessageRole, name="message_role", native_enum=True), nullable=False
+        SAEnum(
+            MessageRole,
+            name="message_role",
+            native_enum=True,
+            # The Postgres enum (migration 0003) stores the lowercase *values*
+            # ("user"/"assistant"); SQLAlchemy defaults to persisting member
+            # *names* ("USER"), which Postgres rejects on insert.
+            values_callable=lambda members: [m.value for m in members],
+        ),
+        nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
 

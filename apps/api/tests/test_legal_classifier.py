@@ -9,10 +9,19 @@ import pytest
 
 from app.core.config import Settings
 from app.core.errors import ServiceUnavailableError
-from app.services import legal_classifier
+from app.services import anthropic_client, legal_classifier
 
-UNCONFIGURED = Settings(anthropic_api_key=None)
-CONFIGURED = Settings(anthropic_api_key="fake-key-for-tests")
+# Every provider unset -> "auto" resolves to nothing -> llm_not_configured.
+UNCONFIGURED = Settings(
+    llm_provider="auto",
+    anthropic_api_key=None,
+    gemini_api_key=None,
+    groq_api_key=None,
+    ollama_base_url=None,
+)
+# These tests drive the Anthropic provider with a fake SDK client; the other
+# providers are covered in tests/test_llm_provider.py.
+CONFIGURED = Settings(llm_provider="anthropic", anthropic_api_key="fake-key-for-tests")
 
 
 class _FakeToolUseBlock:
@@ -88,7 +97,7 @@ async def test_classify_query_raises_when_not_configured() -> None:
 
 async def test_classify_query_parses_tool_response(monkeypatch: pytest.MonkeyPatch) -> None:
     response = _tool_response(category="IT_LAW", jurisdiction_scope="CENTRAL", risk_level="LOW")
-    monkeypatch.setattr(legal_classifier, "get_client", lambda settings: _FakeClient(response))
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _FakeClient(response))
 
     result = await legal_classifier.classify_query("What is the IT Act, 2000?", settings=CONFIGURED)
 
@@ -102,7 +111,7 @@ async def test_classify_query_parses_high_risk(monkeypatch: pytest.MonkeyPatch) 
     response = _tool_response(
         category="ADVOCATE_REQUIRED", risk_level="CRITICAL", jurisdiction_scope="COURT"
     )
-    monkeypatch.setattr(legal_classifier, "get_client", lambda settings: _FakeClient(response))
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _FakeClient(response))
 
     result = await legal_classifier.classify_query("I've been arrested", settings=CONFIGURED)
 
@@ -115,7 +124,7 @@ async def test_classify_query_falls_back_on_invalid_enum_values(
     response = _tool_response(
         category="NOT_A_REAL_CATEGORY", jurisdiction_scope="MARS", risk_level="EXTREME"
     )
-    monkeypatch.setattr(legal_classifier, "get_client", lambda settings: _FakeClient(response))
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _FakeClient(response))
 
     result = await legal_classifier.classify_query("gibberish", settings=CONFIGURED)
 
@@ -130,7 +139,7 @@ async def test_classify_query_fails_safe_when_tool_not_called(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     response = _FakeResponse([_FakeTextBlock("I'd rather just chat.")])
-    monkeypatch.setattr(legal_classifier, "get_client", lambda settings: _FakeClient(response))
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _FakeClient(response))
 
     result = await legal_classifier.classify_query("hi", settings=CONFIGURED)
 
@@ -139,7 +148,7 @@ async def test_classify_query_fails_safe_when_tool_not_called(
 
 
 async def test_classify_query_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(legal_classifier, "get_client", lambda settings: _RaisingClient())
+    monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _RaisingClient())
     with pytest.raises(ServiceUnavailableError) as exc_info:
         await legal_classifier.classify_query("hi", settings=CONFIGURED)
     assert exc_info.value.code == "llm_error"

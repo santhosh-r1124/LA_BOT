@@ -10,13 +10,17 @@ routes users to a qualified advocate rather than acting as one.
 
 > **Phases 0–7 are done**: foundation, authentication & RBAC, the legal
 > knowledge-base ingestion pipeline, production RAG (hybrid search +
-> grounded, cited chat answers), risk scoring (LOW/MEDIUM/HIGH/CRITICAL, with
-> an advocate recommendation on HIGH/CRITICAL), a document-drafting
-> assistant, and advocate marketplace discovery — see the caveat below: no
-> bulk corpus is loaded yet, so most chat answers are currently "insufficient
-> evidence" until real sources are ingested. See
-> [`docs/roadmap.md`](docs/roadmap.md) for the full 16-phase plan and status,
-> and [`docs/architecture.md`](docs/architecture.md) for the system design.
+> grounded, cited, **streamed** chat answers), risk scoring, a
+> document-drafting assistant, and advocate marketplace discovery.
+> **Runs entirely on free services**: one free Google AI Studio key (or a
+> local Ollama model) — see [`docs/api-inventory.md`](docs/api-inventory.md).
+> Load the official legal corpus with `pnpm kb:seed`; until then chat
+> correctly answers "insufficient verified information".
+>
+> Status per feature (based on the code, not the UI):
+> [`docs/project-status.md`](docs/project-status.md) · phase plan:
+> [`docs/roadmap.md`](docs/roadmap.md) · design:
+> [`docs/architecture.md`](docs/architecture.md).
 
 ---
 
@@ -50,13 +54,13 @@ legal-platform/
 
 | Layer            | Choice                                                    |
 | ---------------- | -------------------------------------------------------- |
-| Frontend         | Next.js 15 (App Router, React 19), Tailwind CSS v4       |
+| Frontend         | Next.js 15 (App Router, React 19), Tailwind CSS v4, shared design system (`packages/shared/src/styles`) |
 | Backend API      | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Uvicorn    |
 | Database         | PostgreSQL 16 + `pgvector` (local: Docker; staging/prod: Supabase) |
 | Cache / queue    | Redis 7                                                  |
 | Migrations       | Alembic (schema owned by `apps/api`)                     |
 | Logging          | `structlog` (console in dev, JSON in staging/prod)       |
-| LLM              | Anthropic Claude                                         |
+| LLM              | Provider-agnostic: Google Gemini (free tier, default), Groq (free), Ollama (local), Anthropic (optional, paid) |
 | Embeddings       | Google Gemini (`gemini-embedding-001`, free tier)         |
 | JS monorepo      | pnpm workspaces + Turborepo                              |
 | Python packaging | `uv`                                                     |
@@ -100,14 +104,35 @@ Verification/reset emails are logged (not sent) in development — read the link
 out of the API log output. To create an admin account (there's no public
 admin sign-up): `cd apps/api && uv run python -m app.scripts.create_admin --email you@example.com`.
 
-`/chat` needs **both** `ANTHROPIC_API_KEY` (classification + answer
-generation) and `GEMINI_API_KEY` (retrieval — Phase 4 answers are grounded
-in `legal_chunks`, not the model's own knowledge) — both in `apps/api/.env`,
-both unset by default. Without `ANTHROPIC_API_KEY` the endpoint 503s
-(`llm_not_configured`); without `GEMINI_API_KEY`, or before any legal sources
-are ingested, it replies with the "insufficient verified information"
-message instead of guessing — see
-[`docs/adr/0007-hybrid-search-and-grounding.md`](docs/adr/0007-hybrid-search-and-grounding.md).
+### Configure the AI (free)
+
+1. Get a free Google AI Studio key: <https://aistudio.google.com/apikey>.
+2. Put it in `apps/api/.env` (and the root `.env` for Docker):
+   `GEMINI_API_KEY=...` — it powers both the chat model and the knowledge-base
+   embeddings. Nothing else is required.
+3. Load the official legal sources (India Code / Legislative Department /
+   MeitY — 15 Acts, takes a few minutes on the free tier):
+
+   ```bash
+   pnpm kb:seed          # idempotent; add -- --retry-failed to retry failures
+   ```
+
+4. Check <http://localhost:3000> — the **Platform status** panel reads the
+   real configuration and corpus size from `GET /api/v1/status`.
+
+Prefer another provider? Set `LLM_PROVIDER=groq` + `GROQ_API_KEY` (free), or
+`LLM_PROVIDER=ollama` + `OLLAMA_BASE_URL=http://localhost:11434/v1` for a local
+model with no key at all (embeddings still need the Gemini key). Anthropic
+remains supported (`LLM_PROVIDER=anthropic`, paid). Every variable, rate limit
+and failure mode is documented in
+[`docs/api-inventory.md`](docs/api-inventory.md).
+
+Without any provider configured, chat/documents return a clear
+`503 llm_not_configured` and the UI says so; without indexed sources, chat
+replies with the "insufficient verified information" message instead of
+guessing — see
+[`docs/adr/0007-hybrid-search-and-grounding.md`](docs/adr/0007-hybrid-search-and-grounding.md)
+and [`docs/adr/0010-free-llm-providers-and-streaming.md`](docs/adr/0010-free-llm-providers-and-streaming.md).
 
 ### Running apps individually (without Docker)
 
@@ -134,6 +159,7 @@ on the host — see the comments in `.env.example`.
 | `pnpm stack:up` / `stack:down`| Start / stop the Docker stack               |
 | `pnpm db:migrate`             | Apply Alembic migrations                    |
 | `pnpm db:revision -- "msg"`   | Autogenerate a new migration                |
+| `pnpm kb:seed`                | Index the official Indian legal sources     |
 | `cd apps/api && uv run pytest`| Run backend tests                           |
 | `cd apps/api && uv run ruff check . && uv run mypy .` | Lint + type-check backend |
 

@@ -43,7 +43,7 @@ FAKE_CHUNK = RetrievedChunk(
     chunk_id=uuid.uuid4(),
     document_id=uuid.uuid4(),
     document_title="Test Act, 2000",
-    source_url="https://example.test/act",
+    source_url="https://example.com/act",
     section="1",
     article=None,
     content="Some legal text.",
@@ -315,3 +315,125 @@ async def test_users_cannot_read_each_others_conversations(
 async def test_get_unknown_conversation_is_404(db_client: AsyncClient) -> None:
     resp = await db_client.get("/api/v1/chat/conversations/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Streaming endpoint (Server-Sent Events)
+# ---------------------------------------------------------------------------
+
+
+def _parse_sse(body: str) -> list[tuple[str, dict[str, object]]]:
+    import json
+
+    events: list[tuple[str, dict[str, object]]] = []
+    for block in body.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        events.append((lines["event"], json.loads(lines["data"])))
+    return events
+
+
+def _patch_stream(
+    monkeypatch: pytest.MonkeyPatch, *, deltas: list[str], fail: bool = False
+) -> None:
+    from app.core.errors import ServiceUnavailableError
+
+    async def fake_stream(message: str, **_kwargs: object):  # type: ignore[no-untyped-def]
+        for delta in deltas:
+            yield delta
+        if fail:
+            raise ServiceUnavailableError("limit reached", code="llm_rate_limited")
+
+    monkeypatch.setattr(llm_module, "stream_grounded_answer", fake_stream)
+
+
+async def test_stream_emits_start_deltas_and_done_then_persists(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_llm(monkeypatch)
+    _patch_stream(monkeypatch, deltas=["Section 1 ", "says X [1]."])
+
+    resp = await db_client.post(
+        "/api/v1/chat/messages/stream", json={"message": "What does the Act say?"}
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse(resp.text)
+
+    assert [name for name, _ in events] == ["start", "delta", "delta", "done"]
+    start = events[0][1]
+    assert start["legal_category"] == "IT_LAW"
+    assert start["sources"][0]["document_title"] == FAKE_CHUNK.document_title  # type: ignore[index]
+    done = events[-1][1]
+    assert done["assistant_message"]["content"] == "Section 1 says X [1]."  # type: ignore[index]
+
+    # Persisted exactly like the non-streaming endpoint.
+    conversation_id = done["conversation_id"]
+    detail = await db_client.get(f"/api/v1/chat/conversations/{conversation_id}")
+    assert [m["role"] for m in detail.json()["messages"]] == ["user", "assistant"]
+
+
+async def test_stream_appends_advocate_recommendation_for_high_risk(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_llm(monkeypatch, classification=HIGH_RISK_CLASSIFICATION)
+    _patch_stream(monkeypatch, deltas=["Answer."])
+
+    resp = await db_client.post("/api/v1/chat/messages/stream", json={"message": "notice"})
+    events = _parse_sse(resp.text)
+    done = events[-1][1]
+    assert done["assistant_message"]["content"].endswith(ADVOCATE_RECOMMENDATION_MESSAGE)  # type: ignore[index]
+
+
+async def test_stream_insufficient_evidence_needs_no_generation(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_llm(monkeypatch, retrieved=[])
+    _patch_stream(monkeypatch, deltas=["SHOULD NOT APPEAR"])
+
+    resp = await db_client.post("/api/v1/chat/messages/stream", json={"message": "q"})
+    events = _parse_sse(resp.text)
+    assert events[1] == ("delta", {"text": INSUFFICIENT_EVIDENCE_MESSAGE})
+    assert events[-1][0] == "done"
+
+
+async def test_stream_generation_failure_emits_error_and_persists_nothing(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_llm(monkeypatch)
+    _patch_stream(monkeypatch, deltas=["partial "], fail=True)
+
+    resp = await db_client.post("/api/v1/chat/messages/stream", json={"message": "q"})
+    events = _parse_sse(resp.text)
+    assert events[-1] == ("error", {"code": "llm_rate_limited", "message": "limit reached"})
+    conversation_id = events[0][1]["conversation_id"]
+    detail = await db_client.get(f"/api/v1/chat/conversations/{conversation_id}")
+    assert detail.status_code == 404
+
+
+async def test_stream_without_provider_returns_json_503(db_client: AsyncClient) -> None:
+    resp = await db_client.post("/api/v1/chat/messages/stream", json={"message": "q"})
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "llm_not_configured"
+
+
+# ---------------------------------------------------------------------------
+# Status endpoint
+# ---------------------------------------------------------------------------
+
+
+async def test_status_reports_real_counts_and_no_secrets(db_client: AsyncClient) -> None:
+    resp = await db_client.get("/api/v1/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["llm"] == {
+        "configured": False,
+        "provider": None,
+        "model": None,
+        "is_free_tier": None,
+    }
+    assert body["embeddings"]["configured"] is False
+    kb = body["knowledge_base"]
+    assert kb["available"] is True
+    assert kb["documents_indexed"] >= 0
+    assert body["advocate_directory"]["available"] is True
+    assert "generated_at" in body

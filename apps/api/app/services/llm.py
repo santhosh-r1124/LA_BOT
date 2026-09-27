@@ -1,4 +1,5 @@
-"""Claude-backed grounded answer generation (Phase 4).
+"""Grounded answer generation (Phase 4) — provider-agnostic since the free-LLM
+upgrade (see `app.services.llm_provider`).
 
 Query classification (category/jurisdiction/risk/in-scope) lives in
 `app.services.legal_classifier` — a separate module since Phase 5, not this
@@ -13,10 +14,11 @@ ungrounded generation path: per the product's "grounded, not guessed" rule
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from app.core.config import Settings
-from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger
-from app.services.anthropic_client import get_client
+from app.services.llm_provider import ChatTurn, get_provider
 from app.services.rag.retrieval import RetrievedChunk
 
 logger = get_logger("app.llm")
@@ -61,6 +63,17 @@ def _format_context(context: list[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
+EMPTY_ANSWER_FALLBACK = "I couldn't generate a response just now. Please try again in a moment."
+
+
+def _build_messages(
+    message: str, *, history: list[tuple[str, str]], context: list[RetrievedChunk]
+) -> list[ChatTurn]:
+    turns: list[ChatTurn] = list(history)
+    turns.append(("user", f"SOURCES:\n{_format_context(context)}\n\nQUESTION: {message}"))
+    return turns
+
+
 async def generate_grounded_answer(
     message: str,
     *,
@@ -73,29 +86,28 @@ async def generate_grounded_answer(
     in `history` keep whatever plain text was actually said, not their
     original sources block, since that's what the conversation actually was.
     """
-    client = get_client(settings)
-    messages: list[dict[str, object]] = [
-        {"role": role, "content": content} for role, content in history
-    ]
-    messages.append(
-        {
-            "role": "user",
-            "content": f"SOURCES:\n{_format_context(context)}\n\nQUESTION: {message}",
-        }
+    provider = get_provider(settings)
+    text = await provider.complete(
+        system=_GROUNDED_ANSWER_SYSTEM_PROMPT,
+        messages=_build_messages(message, history=history, context=context),
+        max_tokens=settings.llm_max_tokens,
     )
+    return text or EMPTY_ANSWER_FALLBACK
 
-    try:
-        response = await client.messages.create(
-            model=settings.llm_model,
-            max_tokens=settings.llm_max_tokens,
-            system=_GROUNDED_ANSWER_SYSTEM_PROMPT,
-            messages=messages,  # type: ignore[arg-type]
-        )
-    except Exception as exc:  # Anthropic SDK: network/auth/rate-limit/etc.
-        logger.warning("llm_generate_failed", error=str(exc))
-        raise ServiceUnavailableError(
-            "Could not reach the legal assistant. Please try again shortly.", code="llm_error"
-        ) from exc
 
-    text = "\n".join(block.text for block in response.content if block.type == "text").strip()
-    return text or "I couldn't generate a response just now. Please try again in a moment."
+async def stream_grounded_answer(
+    message: str,
+    *,
+    history: list[tuple[str, str]],
+    context: list[RetrievedChunk],
+    settings: Settings,
+) -> AsyncIterator[str]:
+    """Same prompt and grounding rules as :func:`generate_grounded_answer`,
+    yielded as the model produces it (chat UI streaming)."""
+    provider = get_provider(settings)
+    async for delta in provider.stream(
+        system=_GROUNDED_ANSWER_SYSTEM_PROMPT,
+        messages=_build_messages(message, history=history, context=context),
+        max_tokens=settings.llm_max_tokens,
+    ):
+        yield delta

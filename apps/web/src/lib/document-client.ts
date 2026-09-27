@@ -35,6 +35,8 @@ export const documentClient = {
       method: 'POST',
       body: { document_type: documentType, answers },
       token,
+      // A full draft + notes takes well over the 10s default on free tiers.
+      timeoutMs: 120_000,
     }),
 
   listMine: (token: string) => apiFetch<DocumentRequestOut[]>('/api/v1/documents', { token }),

@@ -30,8 +30,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6 py-16">
-      <h1 className="text-2xl font-semibold tracking-tight">Advocate login</h1>
+    <main className="surface auth-card">
+      <h1 className="display text-2xl">Advocate login</h1>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field label="Email">
@@ -55,16 +55,20 @@ export default function LoginPage() {
           />
         </Field>
 
-        {error && <p className="text-sm text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="field-error text-sm">
+            {error}
+          </p>
+        )}
 
         <button type="submit" disabled={submitting} className={buttonClass}>
           {submitting ? 'Logging in…' : 'Log in'}
         </button>
       </form>
 
-      <p className="text-center text-sm text-slate-600">
+      <p className="text-fg-muted text-center text-sm">
         New here?{' '}
-        <Link href="/register" className="font-medium text-teal-700 hover:underline">
+        <Link href="/register" className="link font-medium">
           Register as an advocate
         </Link>
       </p>

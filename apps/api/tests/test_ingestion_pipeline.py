@@ -65,7 +65,7 @@ async def test_ingest_source_creates_document_and_chunks(
         db=db_txn_session,  # type: ignore[arg-type]
         settings=get_settings(),
         title="Test Act, 2000",
-        source_url="https://example.test/act",
+        source_url="https://example.com/act",
         document_type=DocumentType.ACT,
         law_name="Test Act",
     )
@@ -98,7 +98,7 @@ async def test_ingest_source_records_failure_instead_of_raising(
         db=db_txn_session,  # type: ignore[arg-type]
         settings=get_settings(),
         title="Broken Source",
-        source_url="https://example.test/broken",
+        source_url="https://example.com/broken",
         document_type=DocumentType.OTHER,
     )
 
@@ -116,7 +116,7 @@ async def test_ingest_source_fails_when_no_chunks_extracted(
         db=db_txn_session,  # type: ignore[arg-type]
         settings=get_settings(),
         title="Empty Source",
-        source_url="https://example.test/empty",
+        source_url="https://example.com/empty",
         document_type=DocumentType.OTHER,
     )
 
@@ -134,7 +134,7 @@ async def test_reingest_source_replaces_chunks(
         db=db_txn_session,  # type: ignore[arg-type]
         settings=get_settings(),
         title="Doc",
-        source_url="https://example.test/doc",
+        source_url="https://example.com/doc",
         document_type=DocumentType.ACT,
     )
     assert document.chunk_count == 1

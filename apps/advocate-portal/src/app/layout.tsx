@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <AuthProvider>
           <SiteHeader />
-          {children}
+          <div id="main">{children}</div>
         </AuthProvider>
       </body>
     </html>

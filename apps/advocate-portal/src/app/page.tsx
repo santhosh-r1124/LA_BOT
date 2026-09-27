@@ -1,39 +1,135 @@
-import { env } from '@/lib/env';
+'use client';
 
-const DASHBOARD_SECTIONS = [
-  "Today's Requests",
-  'Upcoming Consultations',
-  'Active Matters',
-  'Messages',
-  'Documents',
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth-context';
+
+const STATUS: Record<string, { label: string; className: string; next: string }> = {
+  PENDING: {
+    label: 'Awaiting verification',
+    className: 'badge badge-warn',
+    next: 'An administrator will review your enrolment details. Keep your profile complete in the meantime.',
+  },
+  IN_REVIEW: {
+    label: 'In review',
+    className: 'badge badge-accent',
+    next: 'Your enrolment is being reviewed.',
+  },
+  VERIFIED: {
+    label: 'Verified',
+    className: 'badge badge-ok',
+    next: 'Your profile is listed in the public advocate directory.',
+  },
+  REJECTED: {
+    label: 'Not approved',
+    className: 'badge badge-danger',
+    next: 'See the reviewer note on your profile page.',
+  },
+};
+
+// Planned portal features (roadmap Phase 9). Listed plainly as not yet
+// available — no placeholder counts or fake activity.
+const PLANNED = [
+  'Consultation requests',
+  'Scheduling & availability',
+  'Client messaging',
+  'Document exchange',
   'Earnings',
-  'Availability',
 ];
 
 export default function AdvocatePortalHome() {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <main className="page page-narrow" aria-busy="true">
+        <div className="skeleton h-8 w-1/2" />
+        <div className="skeleton mt-4 h-32" />
+      </main>
+    );
+  }
+
+  if (!user || !profile) {
+    return (
+      <main className="page page-narrow flex flex-col gap-5 pt-12">
+        <span className="eyebrow">For advocates</span>
+        <h1 className="display text-3xl">Be found by people who need an advocate.</h1>
+        <p className="muted max-w-xl">
+          Register with your enrolment details, practice areas and languages. Once an administrator
+          verifies your profile, it appears in the public directory on the Legal Advisor platform.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/register" className="btn btn-primary">
+            Register as an advocate
+          </Link>
+          <Link href="/login" className="btn btn-secondary">
+            Log in
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const status = STATUS[profile.verification_status] ?? {
+    label: profile.verification_status,
+    className: 'badge',
+    next: '',
+  };
+  const missing = [
+    !profile.practice_areas?.length && 'practice areas',
+    !profile.languages?.length && 'languages',
+    !profile.bio && 'a short bio',
+    !profile.consultation_fee && 'consultation fee',
+  ].filter(Boolean) as string[];
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 px-6 py-16">
-      <span className="w-fit rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700">
-        Phase 0 · Advocate Portal skeleton · {env.NEXT_PUBLIC_APP_ENV}
-      </span>
-      <h1 className="text-2xl font-semibold tracking-tight">Advocate Portal</h1>
-      <p className="text-slate-600">
-        The operating surface advocates use to accept requests, run consultations, exchange
-        documents and track earnings. Built out in Phase 9.
-      </p>
-      <ul className="grid grid-cols-2 gap-2 text-sm">
-        {DASHBOARD_SECTIONS.map((s) => (
-          <li
-            key={s}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-500"
-          >
-            {s}
-          </li>
-        ))}
-      </ul>
-      <p className="text-xs text-slate-400">
-        API base: <code>{env.NEXT_PUBLIC_API_BASE_URL}</code>
-      </p>
+    <main className="page page-narrow">
+      <span className="eyebrow">Dashboard</span>
+      <h1 className="display mt-1 text-2xl sm:text-3xl">
+        Welcome, {user.display_name || user.email}
+      </h1>
+
+      <section className="surface mt-6 p-5" aria-labelledby="listing-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="listing-heading" className="font-semibold">
+            Directory listing
+          </h2>
+          <span className={status.className}>
+            <span className="dot" aria-hidden="true" />
+            {status.label}
+          </span>
+        </div>
+        <p className="muted mt-2 text-sm">{status.next}</p>
+        {missing.length > 0 ? (
+          <p className="alert alert-warn mt-4 block text-sm">
+            Your profile is missing {missing.join(', ')}. Complete profiles are easier for clients
+            to evaluate.{' '}
+            <Link href="/profile" className="link">
+              Edit profile
+            </Link>
+          </p>
+        ) : (
+          <Link href="/profile" className="btn btn-secondary btn-sm mt-4">
+            View profile
+          </Link>
+        )}
+      </section>
+
+      <section className="mt-8" aria-labelledby="planned-heading">
+        <h2 id="planned-heading" className="subtle text-xs font-semibold uppercase tracking-wider">
+          Not available yet
+        </h2>
+        <p className="muted mt-2 text-sm">
+          These portal features are planned but not built. They&apos;ll appear here when
+          consultation booking launches.
+        </p>
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {PLANNED.map((s) => (
+            <li key={s} className="badge">
+              {s}
+            </li>
+          ))}
+        </ul>
+      </section>
     </main>
   );
 }

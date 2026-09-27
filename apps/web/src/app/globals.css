@@ -1,35 +1,5 @@
 @import 'tailwindcss';
-
-@theme {
-  --color-ink: #0f172a;
-  --color-muted: #64748b;
-  --color-surface: #ffffff;
-  --color-canvas: #f8fafc;
-  --color-brand: #1d4ed8;
-  --color-brand-fg: #ffffff;
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-}
-
-@layer base {
-  :root {
-    color-scheme: light;
-  }
-
-  html,
-  body {
-    padding: 0;
-    margin: 0;
-  }
-
-  body {
-    background: var(--color-canvas);
-    color: var(--color-ink);
-    font-family: var(--font-sans);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  a {
-    color: inherit;
-  }
-}
+/* Shared tokens + component classes (glass surfaces, buttons, inputs, badges).
+   See packages/shared/src/styles/design-system.css. */
+@import '@legal-platform/shared/styles/design-system.css';
+/* Tailwind scans this app's sources automatically; nothing else to register. */

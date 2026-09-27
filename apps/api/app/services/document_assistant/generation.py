@@ -1,4 +1,5 @@
-"""Claude-backed draft generation (Phase 6, FRD §7).
+"""Model-backed draft generation (Phase 6, FRD §7) — provider-agnostic via
+`app.services.llm_provider`.
 
 Deliberately NOT run through `app.services.rag.retrieval.hybrid_search`
 grounding the way chat answers are (`app.services.llm`): this drafts a
@@ -16,8 +17,8 @@ from app.core.config import Settings
 from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger
 from app.models.document_request import AssistantDocumentType
-from app.services.anthropic_client import get_client
 from app.services.document_assistant.questions import Question, questions_for
+from app.services.llm_provider import get_provider
 
 logger = get_logger("app.document_assistant")
 
@@ -57,27 +58,21 @@ def _format_answers(document_type: AssistantDocumentType, answers: dict[str, str
     return "\n".join(lines)
 
 
+# Drafts (document + Notes section) are much longer than chat answers.
+_DRAFT_TOKEN_MULTIPLIER = 3
+
+
 async def generate_draft(
     document_type: AssistantDocumentType, *, answers: dict[str, str], settings: Settings
 ) -> str:
-    client = get_client(settings)
-    prompt = _format_answers(document_type, answers)
-
-    try:
-        response = await client.messages.create(
-            model=settings.llm_model,
-            max_tokens=settings.llm_max_tokens,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-    except Exception as exc:  # Anthropic SDK: network/auth/rate-limit/etc.
-        logger.warning("document_draft_generation_failed", error=str(exc))
-        raise ServiceUnavailableError(
-            "Could not reach the legal assistant. Please try again shortly.", code="llm_error"
-        ) from exc
-
-    text = "\n".join(block.text for block in response.content if block.type == "text").strip()
+    provider = get_provider(settings)
+    text = await provider.complete(
+        system=_SYSTEM_PROMPT,
+        messages=[("user", _format_answers(document_type, answers))],
+        max_tokens=settings.llm_max_tokens * _DRAFT_TOKEN_MULTIPLIER,
+    )
     if not text:
+        logger.warning("document_draft_empty", provider=provider.name)
         raise ServiceUnavailableError(
             "The assistant didn't return a draft. Please try again.", code="llm_error"
         )

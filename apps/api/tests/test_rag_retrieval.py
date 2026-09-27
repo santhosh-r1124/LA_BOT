@@ -62,7 +62,7 @@ async def test_hybrid_search_fuses_vector_and_keyword_signals(
 ) -> None:
     document = LegalDocument(
         title="Digital Personal Data Protection Act, 2023",
-        source_url="https://example.test/dpdpa",
+        source_url="https://example.com/dpdpa",
         document_type=DocumentType.ACT,
         checksum="abc",
     )

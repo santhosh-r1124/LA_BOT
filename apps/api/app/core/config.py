@@ -88,12 +88,45 @@ class Settings(BaseSettings):
     )
 
     # ---- LLM / RAG (Phase 2+) ----------------------------------------
-    anthropic_api_key: str | None = None
-    llm_model: str = "claude-sonnet-5"
+    # Which chat model provider answers questions / drafts documents. See
+    # app/services/llm_provider.py and docs/api-inventory.md.
+    #   auto      -> first configured of: gemini, groq, ollama, anthropic
+    #   gemini    -> Google AI Studio free tier (same GEMINI_API_KEY as embeddings)
+    #   groq      -> GroqCloud free tier (OpenAI-compatible API)
+    #   ollama    -> local open-source model, no key, no cost
+    #   anthropic -> Claude (paid; optional)
+    llm_provider: Literal["auto", "gemini", "groq", "ollama", "anthropic"] = "auto"
     llm_max_tokens: int = 1024
     llm_classifier_max_tokens: int = 300
+    llm_request_timeout_seconds: float = 60.0
     # How many prior messages (user + assistant) to include as context.
     chat_history_length: int = 10
+
+    # Anthropic (optional, paid). ``LLM_MODEL`` is kept under its original
+    # name for backwards compatibility and only applies to this provider.
+    anthropic_api_key: str | None = None
+    llm_model: str = "claude-sonnet-5"
+
+    # Google Gemini (free tier). Key shared with embeddings below.
+    gemini_llm_model: str = "gemini-3.5-flash"
+
+    # GroqCloud (free tier, OpenAI-compatible).
+    groq_api_key: str | None = None
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+
+    # Ollama (local). Unset = disabled. Typically http://localhost:11434/v1
+    # (or http://host.docker.internal:11434/v1 from inside Docker).
+    ollama_base_url: str | None = None
+    ollama_model: str = "llama3.1:8b"
+
+    # ---- Abuse / free-tier protection -----------------------------------
+    # Per-client-IP requests per minute on the AI endpoints (chat, document
+    # drafting). Protects free-tier provider quotas. 0 disables the limiter.
+    ai_rate_limit_per_minute: int = 20
+    # How long to cache query embeddings in Redis (repeat questions skip the
+    # embedding API call). 0 disables the cache.
+    embedding_cache_ttl_seconds: int = 24 * 60 * 60
 
     # ---- Embeddings / knowledge base (Phase 3+) ------------------------
     # Google AI Studio key — free tier, no billing account required. Chosen

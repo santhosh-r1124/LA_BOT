@@ -2,7 +2,7 @@
   "name": "legal-platform",
   "version": "0.0.0",
   "private": true,
-  "description": "Indian Legal Advisor Bot & Advocate Connect — monorepo",
+  "description": "Indian Legal Advisor Bot & Advocate Connect \u2014 monorepo",
   "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=22.11.0",
@@ -22,6 +22,7 @@
     "stack:logs": "docker compose -f infrastructure/docker/docker-compose.yml logs -f",
     "db:migrate": "cd apps/api && uv run alembic upgrade head",
     "db:revision": "cd apps/api && uv run alembic revision --autogenerate -m",
+    "kb:seed": "cd apps/api && uv run python -m app.scripts.seed_corpus",
     "api:dev": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000"
   },
   "devDependencies": {

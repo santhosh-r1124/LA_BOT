@@ -73,7 +73,7 @@ async def _ingest(
 ) -> dict[str, object]:
     payload = {
         "title": "Test Act, 2000",
-        "source_url": "https://example.test/act",
+        "source_url": "https://example.com/act",
         "document_type": "ACT",
         **overrides,
     }
@@ -85,7 +85,7 @@ async def _ingest(
 async def test_ingest_requires_authentication(db_client: AsyncClient) -> None:
     resp = await db_client.post(
         "/api/v1/admin/legal-sources",
-        json={"title": "X", "source_url": "https://example.test/x", "document_type": "ACT"},
+        json={"title": "X", "source_url": "https://example.com/x", "document_type": "ACT"},
     )
     assert resp.status_code == 401
 
@@ -98,7 +98,7 @@ async def test_non_admin_cannot_ingest(db_client: AsyncClient) -> None:
     headers = {"Authorization": f"Bearer {consumer.json()['access_token']}"}
     resp = await db_client.post(
         "/api/v1/admin/legal-sources",
-        json={"title": "X", "source_url": "https://example.test/x", "document_type": "ACT"},
+        json={"title": "X", "source_url": "https://example.com/x", "document_type": "ACT"},
         headers=headers,
     )
     assert resp.status_code == 403
@@ -133,7 +133,7 @@ async def test_ingestion_failure_is_recorded_not_500(
         "/api/v1/admin/legal-sources",
         json={
             "title": "Broken",
-            "source_url": "https://example.test/broken",
+            "source_url": "https://example.com/broken",
             "document_type": "OTHER",
         },
         headers=headers,

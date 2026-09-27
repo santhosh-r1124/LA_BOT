@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 
-/** Small shared form primitives for the auth pages (register/login/verify/reset/profile). */
+/**
+ * Form primitives shared by the auth/profile pages. Visual styles come from
+ * the design system (packages/shared/src/styles/design-system.css) — these
+ * exports keep the call sites unchanged.
+ */
 export function Field({
   label,
   hint,
@@ -11,19 +15,16 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium text-slate-700">{label}</span>
+    <label className="flex flex-col gap-1.5">
+      <span className="label">{label}</span>
       {children}
-      {hint && <span className="text-xs text-slate-500">{hint}</span>}
+      {hint && <span className="hint">{hint}</span>}
     </label>
   );
 }
 
-export const inputClass =
-  'rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
+export const inputClass = 'input';
 
-export const buttonClass =
-  'rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60';
+export const buttonClass = 'btn btn-primary';
 
-export const secondaryButtonClass =
-  'rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60';
+export const secondaryButtonClass = 'btn btn-secondary';
