@@ -23,9 +23,10 @@ from fastapi import APIRouter, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, SettingsDep
 from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
 from app.models.consultation import Consultation, ConsultationStatus
+from app.models.payment import Payment
 from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
 from app.schemas.consultation import (
     ConsultationAcceptRequest,
@@ -36,8 +37,13 @@ from app.schemas.consultation import (
     ConsultationOut,
     PaginatedConsultations,
 )
+from app.schemas.payment import PaymentOrderOut, PaymentOut, PaymentVerifyRequest
 from app.services import consultation_lifecycle as lifecycle
 from app.services.email import send_consultation_notification
+from app.services.payments.service import (
+    confirm_checkout_payment,
+    create_payment_order,
+)
 
 router = APIRouter()
 
@@ -355,3 +361,88 @@ async def close_consultation(
     await db.commit()
     consultation = await _get_with_parties(db, consultation_id)
     return _to_out(consultation, viewer=user)
+
+
+# ---------------------------------------------------------------------------
+# Payment (Phase 10) — see app/services/payments/service.py
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{consultation_id}/payment/order",
+    response_model=PaymentOrderOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Start checkout for a consultation (consumer)",
+)
+async def create_consultation_payment_order(
+    consultation_id: uuid.UUID, user: CurrentUser, db: DbSession, settings: SettingsDep
+) -> PaymentOrderOut:
+    consultation = await _get_with_parties(db, consultation_id)
+    if not _is_consumer_party(consultation, user):
+        raise ForbiddenError("Only the consumer who booked this consultation can pay for it.")
+    payment, order = await create_payment_order(db=db, settings=settings, consultation=consultation)
+    return PaymentOrderOut(
+        payment=PaymentOut.model_validate(payment),
+        gateway=payment.provider,
+        gateway_order_id=order.order_id,
+        amount_minor=order.amount,
+        currency=order.currency,
+        key_id=settings.razorpay_key_id,
+    )
+
+
+@router.post(
+    "/{consultation_id}/payment/verify",
+    response_model=PaymentOut,
+    summary="Confirm a completed checkout (consumer)",
+)
+async def verify_consultation_payment(
+    consultation_id: uuid.UUID,
+    payload: PaymentVerifyRequest,
+    user: CurrentUser,
+    db: DbSession,
+    settings: SettingsDep,
+) -> PaymentOut:
+    consultation = await _get_with_parties(db, consultation_id)
+    if not _is_consumer_party(consultation, user):
+        raise ForbiddenError("Only the consumer who booked this consultation can confirm payment.")
+    payment = await db.scalar(
+        select(Payment).where(
+            Payment.id == payload.payment_id, Payment.consultation_id == consultation.id
+        )
+    )
+    if payment is None:
+        raise NotFoundError("Payment not found for this consultation.")
+    payment = await confirm_checkout_payment(
+        db=db,
+        settings=settings,
+        consultation=consultation,
+        payment=payment,
+        gateway_payment_id=payload.gateway_payment_id,
+        signature=payload.signature,
+    )
+    return PaymentOut.model_validate(payment)
+
+
+@router.get(
+    "/{consultation_id}/payments",
+    response_model=list[PaymentOut],
+    summary="Payment attempts and receipts for a consultation",
+)
+async def list_consultation_payments(
+    consultation_id: uuid.UUID, user: CurrentUser, db: DbSession
+) -> list[PaymentOut]:
+    consultation = await _get_with_parties(db, consultation_id)
+    _require_party(consultation, user)
+    rows = (
+        (
+            await db.execute(
+                select(Payment)
+                .where(Payment.consultation_id == consultation.id)
+                .order_by(Payment.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [PaymentOut.model_validate(p) for p in rows]

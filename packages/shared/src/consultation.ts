@@ -59,6 +59,33 @@ export interface PaginatedConsultations {
   offset: number;
 }
 
+/** Mirrors `app/schemas/payment.py::PaymentOut`. */
+export interface Payment {
+  id: string;
+  consultation_id: string;
+  provider: string;
+  gateway_order_id: string;
+  gateway_payment_id: string | null;
+  amount: string;
+  currency: string;
+  status: 'CREATED' | 'CAPTURED' | 'FAILED' | 'REFUNDED';
+  failure_reason: string | null;
+  refunded_amount: string | null;
+  captured_at: string | null;
+  created_at: string;
+}
+
+/** Mirrors `app/schemas/payment.py::PaymentOrderOut`. */
+export interface PaymentOrder {
+  payment: Payment;
+  gateway: string;
+  gateway_order_id: string;
+  /** Smallest currency unit (paise) — what checkout.js expects. */
+  amount_minor: number;
+  currency: string;
+  key_id: string | null;
+}
+
 /** Statuses from which either party may still cancel. */
 export const CANCELLABLE_CONSULTATION_STATUSES: ReadonlySet<ConsultationStatus> = new Set([
   'REQUESTED',

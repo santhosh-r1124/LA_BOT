@@ -1,4 +1,9 @@
-import type { Consultation, PaginatedConsultations } from '@legal-platform/shared';
+import type {
+  Consultation,
+  PaginatedConsultations,
+  Payment,
+  PaymentOrder,
+} from '@legal-platform/shared';
 import { apiFetch } from './api-client';
 
 export interface CreateConsultationPayload {
@@ -27,6 +32,23 @@ export const consultationClient = {
     apiFetch<Consultation>(`/api/v1/consultations/${id}/cancel`, {
       method: 'POST',
       body: { reason },
+      token,
+    }),
+
+  createPaymentOrder: (id: string, token: string) =>
+    apiFetch<PaymentOrder>(`/api/v1/consultations/${id}/payment/order`, {
+      method: 'POST',
+      token,
+    }),
+
+  verifyPayment: (
+    id: string,
+    body: { payment_id: string; gateway_payment_id: string; signature: string },
+    token: string,
+  ) =>
+    apiFetch<Payment>(`/api/v1/consultations/${id}/payment/verify`, {
+      method: 'POST',
+      body,
       token,
     }),
 };

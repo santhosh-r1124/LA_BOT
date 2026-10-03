@@ -168,6 +168,18 @@ class Settings(BaseSettings):
     hf_dataset_page_size: int = 100
     hf_dataset_max_rows: int = 2000
 
+    # ---- Payments (Phase 10) -------------------------------------------
+    # Razorpay (test or live mode — same API, different keys). Unset by
+    # default, same "build now, key later" pattern as GEMINI_API_KEY: order
+    # creation 503s with payments_not_configured until these are set. See
+    # docs/adr/0012-payments-provider.md.
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    # Separate secret configured in the Razorpay dashboard for webhooks —
+    # deliberately not the same as the API key secret above.
+    razorpay_webhook_secret: str | None = None
+    razorpay_api_base_url: str = "https://api.razorpay.com/v1"
+
     # ---- Frontend (Phase 1+) ------------------------------------------
     # Base URL used to build links inside emails (verify-email, reset-password).
     frontend_base_url: str = "http://localhost:3000"

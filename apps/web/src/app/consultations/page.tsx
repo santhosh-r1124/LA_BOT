@@ -8,6 +8,7 @@ import { ApiRequestError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { consultationClient } from '@/lib/consultation-client';
 import { formatInr } from '@/lib/format';
+import { openRazorpayCheckout } from '@/lib/razorpay-checkout';
 
 const STATUS_TONE: Record<Consultation['status'], 'ok' | 'warn' | 'danger' | 'neutral'> = {
   REQUESTED: 'warn',
@@ -18,15 +19,90 @@ const STATUS_TONE: Record<Consultation['status'], 'ok' | 'warn' | 'danger' | 'ne
   CLOSED: 'neutral',
 };
 
+const PAYMENT_LABEL: Record<
+  Consultation['payment_status'],
+  { tone: 'ok' | 'warn' | 'neutral'; label: string }
+> = {
+  UNPAID: { tone: 'warn', label: 'Unpaid' },
+  PENDING: { tone: 'warn', label: 'Payment pending' },
+  PAID: { tone: 'ok', label: 'Paid' },
+  REFUNDED: { tone: 'neutral', label: 'Refunded' },
+  WAIVED: { tone: 'neutral', label: 'Fee waived' },
+};
+
+function PayButton({ consultation, onPaid }: { consultation: Consultation; onPaid: () => void }) {
+  const { user, accessToken } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function pay() {
+    if (!accessToken || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const order = await consultationClient.createPaymentOrder(consultation.id, accessToken);
+      if (!order.key_id) throw new Error('Payments are not configured on this server yet.');
+      const result = await openRazorpayCheckout({
+        keyId: order.key_id,
+        orderId: order.gateway_order_id,
+        amountMinor: order.amount_minor,
+        currency: order.currency,
+        description: consultation.topic,
+        email: user?.email,
+      });
+      await consultationClient.verifyPayment(
+        consultation.id,
+        {
+          payment_id: order.payment.id,
+          gateway_payment_id: result.razorpay_payment_id,
+          signature: result.razorpay_signature,
+        },
+        accessToken,
+      );
+      onPaid();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Payment could not be completed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void pay()}
+        className="btn btn-primary btn-sm self-start"
+      >
+        {busy ? 'Opening payment…' : `Pay ${formatInr(consultation.fee_amount) ?? ''}`}
+      </button>
+      {error && (
+        <p role="alert" className="field-error text-sm">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ConsultationCard({
   consultation,
   onCancel,
+  onChanged,
 }: {
   consultation: Consultation;
   onCancel: (id: string) => void;
+  onChanged: () => void;
 }) {
   const [cancelling, setCancelling] = useState(false);
   const canCancel = consultation.status === 'REQUESTED' || consultation.status === 'ACCEPTED';
+  const canPay =
+    (consultation.status === 'ACCEPTED' || consultation.status === 'COMPLETED') &&
+    (consultation.payment_status === 'UNPAID' || consultation.payment_status === 'PENDING') &&
+    consultation.fee_amount !== null &&
+    Number(consultation.fee_amount) > 0;
+  const payment = PAYMENT_LABEL[consultation.payment_status];
 
   return (
     <li className="surface flex flex-col gap-3 p-4">
@@ -53,7 +129,9 @@ function ConsultationCard({
         {consultation.fee_amount && (
           <div>
             <dt className="inline font-medium">Fee: </dt>
-            <dd className="inline">{formatInr(consultation.fee_amount)}</dd>
+            <dd className="inline">
+              {formatInr(consultation.fee_amount)} · {payment.label}
+            </dd>
           </div>
         )}
         {consultation.meeting_link && (
@@ -78,19 +156,22 @@ function ConsultationCard({
       {consultation.status === 'CANCELLED' && consultation.cancellation_reason && (
         <p className="alert text-sm">Cancelled: {consultation.cancellation_reason}</p>
       )}
-      {canCancel && (
-        <button
-          type="button"
-          disabled={cancelling}
-          onClick={() => {
-            setCancelling(true);
-            onCancel(consultation.id);
-          }}
-          className="btn btn-ghost btn-sm self-start"
-        >
-          {cancelling ? 'Cancelling…' : 'Cancel'}
-        </button>
-      )}
+      <div className="flex flex-wrap items-start gap-2">
+        {canPay && <PayButton consultation={consultation} onPaid={onChanged} />}
+        {canCancel && (
+          <button
+            type="button"
+            disabled={cancelling}
+            onClick={() => {
+              setCancelling(true);
+              onCancel(consultation.id);
+            }}
+            className="btn btn-ghost btn-sm"
+          >
+            {cancelling ? 'Cancelling…' : 'Cancel'}
+          </button>
+        )}
+      </div>
     </li>
   );
 }
@@ -152,7 +233,7 @@ export default function ConsultationsPage() {
       ) : (
         <ul className="flex flex-col gap-3">
           {consultations.map((c) => (
-            <ConsultationCard key={c.id} consultation={c} onCancel={cancel} />
+            <ConsultationCard key={c.id} consultation={c} onCancel={cancel} onChanged={load} />
           ))}
         </ul>
       )}
