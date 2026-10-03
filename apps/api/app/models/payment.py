@@ -46,7 +46,9 @@ class Payment(TimestampMixin, Base):
     gateway_order_id: Mapped[str] = mapped_column(String(100), nullable=False)
     gateway_payment_id: Mapped[str | None] = mapped_column(String(100))
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="INR", server_default="INR"
+    )
     status: Mapped[PaymentStatus] = mapped_column(
         SAEnum(PaymentStatus, name="payment_status", native_enum=True),
         nullable=False,

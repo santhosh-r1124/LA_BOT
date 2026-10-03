@@ -54,7 +54,9 @@ class LegalSourceCatalogEntry(TimestampMixin, Base):
         SAEnum(DocumentType, name="legal_document_type", native_enum=True, create_type=False),
         nullable=False,
     )
-    jurisdiction: Mapped[str] = mapped_column(String(10), nullable=False, default="IN")
+    jurisdiction: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="IN", server_default="IN"
+    )
     state_code: Mapped[str | None] = mapped_column(String(2))
     status: Mapped[CatalogEntryStatus] = mapped_column(
         SAEnum(CatalogEntryStatus, name="catalog_entry_status", native_enum=True),

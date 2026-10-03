@@ -76,7 +76,6 @@ class AdvocateProfile(TimestampMixin, Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
         nullable=False,
     )
     practice_areas: Mapped[list[str]] = mapped_column(
@@ -100,6 +99,10 @@ class AdvocateProfile(TimestampMixin, Base):
 
     user: Mapped[User] = relationship(back_populates="advocate_profile")
 
+    # Migration 0002 created these as unique *indexes*; declared the same way
+    # here so `alembic check` sees no drift.
+    __table_args__ = (Index("uq_advocate_profiles_user_id", "user_id", unique=True),)
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"AdvocateProfile(user_id={self.user_id!s}, status={self.verification_status})"
 
@@ -113,12 +116,15 @@ class EmailVerificationToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
-    __table_args__ = (Index("ix_email_verification_tokens_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_email_verification_tokens_token_hash", "token_hash", unique=True),
+        Index("ix_email_verification_tokens_user_id", "user_id"),
+    )
 
 
 class PasswordResetToken(Base):
@@ -130,12 +136,15 @@ class PasswordResetToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
-    __table_args__ = (Index("ix_password_reset_tokens_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_password_reset_tokens_token_hash", "token_hash", unique=True),
+        Index("ix_password_reset_tokens_user_id", "user_id"),
+    )
 
 
 class RefreshToken(Base):
@@ -153,9 +162,12 @@ class RefreshToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    jti_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    jti_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
 
-    __table_args__ = (Index("ix_refresh_tokens_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_refresh_tokens_jti_hash", "jti_hash", unique=True),
+        Index("ix_refresh_tokens_user_id", "user_id"),
+    )
