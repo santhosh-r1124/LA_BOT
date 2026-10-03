@@ -272,7 +272,7 @@ async def test_webhook_capture_failure_ordering_and_refund(
     razorpay_configured: None,
     fake_razorpay_http: list[dict[str, object]],
 ) -> None:
-    _advocate, consumer_tokens, consultation_id = await _accepted_consultation(
+    advocate_tokens, consumer_tokens, consultation_id = await _accepted_consultation(
         db_client, db_txn_session
     )
     resp = await db_client.post(
@@ -299,6 +299,11 @@ async def test_webhook_capture_failure_ordering_and_refund(
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["outcome"] == "captured"
+
+    # ...and the advocate is told exactly once despite the duplicate delivery.
+    resp = await db_client.get("/api/v1/notifications", headers=_headers(advocate_tokens))
+    kinds = [n["kind"] for n in resp.json()["items"]]
+    assert kinds.count("PAYMENT_RECEIVED") == 1
 
     # A late payment.failed for the same order must not un-capture it.
     raw, sig = _webhook(

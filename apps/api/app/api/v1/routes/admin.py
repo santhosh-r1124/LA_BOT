@@ -16,10 +16,12 @@ from sqlalchemy import func, select
 
 from app.api.deps import DbSession, require_roles
 from app.core.errors import NotFoundError
+from app.models.notification import NotificationKind
 from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
 from app.schemas.admin import PaginatedAdvocateProfiles, PaginatedUsers, UserActiveUpdateRequest
 from app.schemas.advocate import AdvocateProfileOut, AdvocateRejectRequest, AdvocateVerifyRequest
 from app.schemas.user import UserOut
+from app.services.notifications import notify
 
 router = APIRouter()
 
@@ -115,6 +117,20 @@ async def verify_advocate(
     profile.verification_note = payload.note
     await db.commit()
     await db.refresh(profile)
+    advocate = await db.get(User, profile.user_id)
+    if advocate is not None:
+        await notify(
+            db,
+            user_id=advocate.id,
+            email=advocate.email,
+            kind=NotificationKind.ADVOCATE_VERIFIED,
+            title="Your advocate profile is verified",
+            body=(
+                "Your profile is now listed in the public directory and can receive "
+                "consultation requests."
+            ),
+            link="/",
+        )
     return AdvocateProfileOut.model_validate(profile)
 
 
@@ -133,4 +149,15 @@ async def reject_advocate(
     profile.verification_note = payload.note
     await db.commit()
     await db.refresh(profile)
+    advocate = await db.get(User, profile.user_id)
+    if advocate is not None:
+        await notify(
+            db,
+            user_id=advocate.id,
+            email=advocate.email,
+            kind=NotificationKind.ADVOCATE_REJECTED,
+            title="Your advocate profile was not approved",
+            body=f"Reviewer note: {payload.note}" if payload.note else "See your profile page.",
+            link="/profile",
+        )
     return AdvocateProfileOut.model_validate(profile)

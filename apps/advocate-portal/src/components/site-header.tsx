@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { NotificationBell } from '@/components/notification-bell';
 import { useAuth } from '@/lib/auth-context';
 
 export function SiteHeader() {
@@ -26,9 +27,12 @@ export function SiteHeader() {
         </Link>
         <nav aria-label="Account" className="flex items-center gap-2">
           {!loading && user && (
-            <Link href="/consultations" className="btn btn-ghost btn-sm">
-              Consultations
-            </Link>
+            <>
+              <Link href="/consultations" className="btn btn-ghost btn-sm">
+                Consultations
+              </Link>
+              <NotificationBell />
+            </>
           )}
           {loading ? (
             <span className="skeleton h-8 w-20" aria-hidden="true" />

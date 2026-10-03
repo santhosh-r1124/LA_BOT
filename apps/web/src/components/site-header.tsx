@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { NotificationBell } from '@/components/notification-bell';
 import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
@@ -25,9 +26,12 @@ export function SiteHeader() {
   const account = loading ? (
     <span className="skeleton h-8 w-20" aria-hidden="true" />
   ) : user ? (
-    <Link href="/profile" className="btn btn-ghost btn-sm max-w-[14rem] truncate">
-      {user.display_name || user.email}
-    </Link>
+    <>
+      <NotificationBell />
+      <Link href="/profile" className="btn btn-ghost btn-sm max-w-[14rem] truncate">
+        {user.display_name || user.email}
+      </Link>
+    </>
   ) : (
     <>
       <Link href="/login" className="btn btn-ghost btn-sm">

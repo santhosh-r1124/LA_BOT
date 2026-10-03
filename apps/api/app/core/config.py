@@ -180,6 +180,21 @@ class Settings(BaseSettings):
     razorpay_webhook_secret: str | None = None
     razorpay_api_base_url: str = "https://api.razorpay.com/v1"
 
+    # ---- Email delivery (Phase 11) --------------------------------------
+    # "console" logs emails (dev default, no account needed); "smtp" sends via
+    # any SMTP relay — Brevo, Resend, Amazon SES, Mailgun and Gmail all
+    # expose one, several with a free tier. See docs/adr/0013.
+    email_backend: Literal["console", "smtp"] = "console"
+    email_from: str = "Legal Advisor <no-reply@localhost>"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    # STARTTLS on a plain connection (port 587) vs. implicit TLS (port 465).
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    smtp_timeout_seconds: float = 15.0
+
     # ---- Frontend (Phase 1+) ------------------------------------------
     # Base URL used to build links inside emails (verify-email, reset-password).
     frontend_base_url: str = "http://localhost:3000"

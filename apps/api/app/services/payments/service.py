@@ -22,7 +22,10 @@ from app.core.config import Settings
 from app.core.errors import ConflictError, UnauthorizedError, ValidationAppError
 from app.core.logging import get_logger
 from app.models.consultation import Consultation, ConsultationPaymentStatus, ConsultationStatus
+from app.models.notification import NotificationKind
 from app.models.payment import Payment, PaymentStatus
+from app.models.user import AdvocateProfile, User
+from app.services.notifications import notify
 from app.services.payments.base import GatewayOrder, GatewayRefund, PaymentGateway
 from app.services.payments.razorpay_gateway import RazorpayGateway
 
@@ -110,15 +113,59 @@ async def create_payment_order(
 
 def _mark_captured(
     payment: Payment, consultation: Consultation, gateway_payment_id: str | None
-) -> None:
+) -> bool:
+    """Returns True only on the transition into CAPTURED, so callers notify once."""
     if payment.status in (PaymentStatus.CAPTURED, PaymentStatus.REFUNDED):
-        return
+        return False
     payment.status = PaymentStatus.CAPTURED
     payment.failure_reason = None
     if gateway_payment_id:
         payment.gateway_payment_id = gateway_payment_id
     payment.captured_at = datetime.now(UTC)
     consultation.payment_status = ConsultationPaymentStatus.PAID
+    return True
+
+
+async def _notify_payment_event(
+    db: AsyncSession, consultation: Consultation, payment: Payment, *, refunded: bool
+) -> None:
+    if refunded:
+        consumer = await db.get(User, consultation.consumer_id)
+        if consumer is None:
+            return
+        await notify(
+            db,
+            user_id=consumer.id,
+            email=consumer.email,
+            kind=NotificationKind.PAYMENT_REFUNDED,
+            title="Your payment was refunded",
+            body=(
+                f"Your payment for the consultation on {consultation.topic!r} was refunded. "
+                "Refunds usually reach your account within 5-7 working days."
+            ),
+            link="/consultations",
+        )
+        return
+
+    advocate = await db.scalar(
+        select(User)
+        .join(AdvocateProfile, AdvocateProfile.user_id == User.id)
+        .where(AdvocateProfile.id == consultation.advocate_profile_id)
+    )
+    if advocate is None:
+        return
+    await notify(
+        db,
+        user_id=advocate.id,
+        email=advocate.email,
+        kind=NotificationKind.PAYMENT_RECEIVED,
+        title="Payment received",
+        body=(
+            f"The consumer paid {payment.currency} {payment.amount} for the consultation "
+            f"on {consultation.topic!r}."
+        ),
+        link="/consultations",
+    )
 
 
 async def confirm_checkout_payment(
@@ -147,9 +194,11 @@ async def confirm_checkout_payment(
             code="invalid_payment_signature",
         )
 
-    _mark_captured(payment, consultation, gateway_payment_id)
+    newly_captured = _mark_captured(payment, consultation, gateway_payment_id)
     await db.commit()
     await db.refresh(payment)
+    if newly_captured:
+        await _notify_payment_event(db, consultation, payment, refunded=False)
     return payment
 
 
@@ -188,8 +237,10 @@ async def handle_webhook(
 
     payment.raw_webhook_payload = event.raw
     outcome = "ignored"
+    notify_kind: str | None = None
     if event.event == "payment.captured":
-        _mark_captured(payment, consultation, event.gateway_payment_id)
+        if _mark_captured(payment, consultation, event.gateway_payment_id):
+            notify_kind = "captured"
         outcome = "captured"
     elif event.event == "payment.failed":
         if payment.status == PaymentStatus.CREATED:
@@ -198,6 +249,8 @@ async def handle_webhook(
             consultation.payment_status = ConsultationPaymentStatus.UNPAID
         outcome = "failed"
     elif event.event == "refund.processed":
+        if payment.status != PaymentStatus.REFUNDED:
+            notify_kind = "refunded"
         payment.status = PaymentStatus.REFUNDED
         if event.amount is not None:
             payment.refunded_amount = from_minor_units(event.amount)
@@ -206,6 +259,8 @@ async def handle_webhook(
 
     await db.commit()
     logger.info("payment_webhook_applied", gateway_event=event.event, outcome=outcome)
+    if notify_kind is not None:
+        await _notify_payment_event(db, consultation, payment, refunded=notify_kind == "refunded")
     return outcome
 
 

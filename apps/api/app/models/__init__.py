@@ -17,6 +17,7 @@ from app.models.consultation import (
 from app.models.document_request import AssistantDocumentType, DocumentRequest
 from app.models.legal_document import DocumentType, IngestionStatus, LegalChunk, LegalDocument
 from app.models.legal_source_catalog import CatalogEntryStatus, LegalSourceCatalogEntry
+from app.models.notification import Notification, NotificationKind
 from app.models.payment import Payment, PaymentStatus
 from app.models.user import (
     AdvocateProfile,
@@ -47,6 +48,8 @@ __all__ = [
     "LegalDocument",
     "LegalSourceCatalogEntry",
     "MessageRole",
+    "Notification",
+    "NotificationKind",
     "PasswordResetToken",
     "Payment",
     "PaymentStatus",

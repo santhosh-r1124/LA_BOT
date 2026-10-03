@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     documents,
     legal_sources,
     meta,
+    notifications,
     payments,
     users,
 )
@@ -26,6 +27,7 @@ api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(consultations.router, prefix="/consultations", tags=["consultations"])
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(payments.admin_router, prefix="/admin/payments", tags=["admin"])
 api_router.include_router(
     legal_sources.router, prefix="/admin/legal-sources", tags=["legal-sources"]

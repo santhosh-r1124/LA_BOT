@@ -2,10 +2,9 @@
 
 REQUESTED -> ACCEPTED/DECLINED -> COMPLETED -> CLOSED, or CANCELLED from an
 active state. Transition rules live in ``app.services.consultation_lifecycle``
-— handlers just load the row, check the rule, mutate, and persist. Both
-parties get an email through the same ``EmailSender`` Phase 1 already uses
-(``ConsoleEmailSender`` today; Phase 11 swaps the implementation, not the
-call sites).
+— handlers just load the row, check the rule, mutate, and persist. The
+other party is told via ``app.services.notifications.notify`` (in-app
+record + best-effort email copy).
 
 After every mutation the row is re-fetched with its relationships via
 ``_get_with_parties`` rather than ``db.refresh()``-ing the mutated instance —
@@ -25,7 +24,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentUser, DbSession, SettingsDep
 from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
-from app.models.consultation import Consultation, ConsultationStatus
+from app.models.consultation import Consultation, ConsultationPaymentStatus, ConsultationStatus
+from app.models.notification import NotificationKind
 from app.models.payment import Payment
 from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
 from app.schemas.consultation import (
@@ -39,7 +39,7 @@ from app.schemas.consultation import (
 )
 from app.schemas.payment import PaymentOrderOut, PaymentOut, PaymentVerifyRequest
 from app.services import consultation_lifecycle as lifecycle
-from app.services.email import send_consultation_notification
+from app.services.notifications import notify
 from app.services.payments.service import (
     confirm_checkout_payment,
     create_payment_order,
@@ -149,16 +149,19 @@ async def create_consultation(
     await db.commit()
     consultation = await _get_with_parties(db, consultation.id)
 
-    if advocate_profile.user.email:
-        await send_consultation_notification(
-            to=advocate_profile.user.email,
-            subject="New consultation request — Legal Advisor",
-            body=(
-                f"{user.display_name or user.email} requested a {payload.mode.value.lower()} "
-                f"consultation on {payload.practice_area}: {payload.topic}. "
-                "Sign in to the advocate portal to accept or decline."
-            ),
-        )
+    await notify(
+        db,
+        user_id=advocate_profile.user_id,
+        email=advocate_profile.user.email,
+        kind=NotificationKind.CONSULTATION_REQUESTED,
+        title="New consultation request",
+        body=(
+            f"{user.display_name or 'A consumer'} requested a {payload.mode.value.lower()} "
+            f"consultation on {payload.practice_area}: {payload.topic}. "
+            "Sign in to the advocate portal to accept or decline."
+        ),
+        link="/consultations",
+    )
     return _to_out(consultation, viewer=user)
 
 
@@ -233,17 +236,19 @@ async def accept_consultation(
     await db.commit()
     consultation = await _get_with_parties(db, consultation_id)
 
-    consumer_email = consultation.consumer.email
-    if consumer_email:
-        await send_consultation_notification(
-            to=consumer_email,
-            subject="Your consultation was accepted — Legal Advisor",
-            body=(
-                f"Your consultation on {consultation.topic!r} was accepted, scheduled for "
-                f"{payload.scheduled_at.isoformat()}."
-                + (f" Join: {payload.meeting_link}" if payload.meeting_link else "")
-            ),
-        )
+    await notify(
+        db,
+        user_id=consultation.consumer_id,
+        email=consultation.consumer.email,
+        kind=NotificationKind.CONSULTATION_ACCEPTED,
+        title="Your consultation was accepted",
+        body=(
+            f"Your consultation on {consultation.topic!r} was accepted, scheduled for "
+            f"{payload.scheduled_at.isoformat()}."
+            + (f" Join: {payload.meeting_link}" if payload.meeting_link else "")
+        ),
+        link="/consultations",
+    )
     return _to_out(consultation, viewer=user)
 
 
@@ -271,13 +276,15 @@ async def decline_consultation(
     await db.commit()
     consultation = await _get_with_parties(db, consultation_id)
 
-    consumer_email = consultation.consumer.email
-    if consumer_email:
-        await send_consultation_notification(
-            to=consumer_email,
-            subject="Your consultation request was declined — Legal Advisor",
-            body=f"Your consultation on {consultation.topic!r} was declined: {payload.reason}",
-        )
+    await notify(
+        db,
+        user_id=consultation.consumer_id,
+        email=consultation.consumer.email,
+        kind=NotificationKind.CONSULTATION_DECLINED,
+        title="Your consultation request was declined",
+        body=f"Your consultation on {consultation.topic!r} was declined: {payload.reason}",
+        link="/consultations",
+    )
     return _to_out(consultation, viewer=user)
 
 
@@ -294,21 +301,27 @@ async def cancel_consultation(
             f"Cannot cancel a consultation in status {consultation.status.value}.",
             code="invalid_transition",
         )
-    is_consumer = _is_consumer_party(consultation, user)
-    other_email = (
-        consultation.advocate_profile.user.email if is_consumer else consultation.consumer.email
-    )
+    # An admin cancelling notifies both parties; a party cancelling notifies the other.
+    recipients: list[User] = []
+    if not _is_consumer_party(consultation, user):
+        recipients.append(consultation.consumer)
+    if not _is_advocate_party(consultation, user):
+        recipients.append(consultation.advocate_profile.user)
     consultation.status = ConsultationStatus.CANCELLED
     consultation.cancelled_by_id = user.id
     consultation.cancellation_reason = payload.reason
     await db.commit()
     consultation = await _get_with_parties(db, consultation_id)
 
-    if other_email:
-        await send_consultation_notification(
-            to=other_email,
-            subject="A consultation was cancelled — Legal Advisor",
+    for recipient in recipients:
+        await notify(
+            db,
+            user_id=recipient.id,
+            email=recipient.email,
+            kind=NotificationKind.CONSULTATION_CANCELLED,
+            title="A consultation was cancelled",
             body=f"The consultation on {consultation.topic!r} was cancelled: {payload.reason}",
+            link="/consultations",
         )
     return _to_out(consultation, viewer=user)
 
@@ -337,6 +350,27 @@ async def complete_consultation(
         consultation.advocate_notes = payload.advocate_notes
     await db.commit()
     consultation = await _get_with_parties(db, consultation_id)
+
+    unpaid = consultation.payment_status in (
+        ConsultationPaymentStatus.UNPAID,
+        ConsultationPaymentStatus.PENDING,
+    ) and bool(consultation.fee_amount)
+    await notify(
+        db,
+        user_id=consultation.consumer_id,
+        email=consultation.consumer.email,
+        kind=NotificationKind.CONSULTATION_COMPLETED,
+        title="Your consultation is complete",
+        body=(
+            f"Your advocate marked the consultation on {consultation.topic!r} as complete."
+            + (
+                " The fee is still outstanding — you can pay from your consultations page."
+                if unpaid
+                else ""
+            )
+        ),
+        link="/consultations",
+    )
     return _to_out(consultation, viewer=user)
 
 
