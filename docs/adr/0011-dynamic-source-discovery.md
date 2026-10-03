@@ -45,7 +45,7 @@ HTML-scraped, so they don't rot every time a site is redesigned:
   something this sandbox could verify (see Limitations); the provider tries
   each configured path and records which one actually works.
 - **`hf_dataset`** — `RUDXLABS/india-central-state-acts` on Hugging Face is a
-  public corpus of ~34,729 central *and state* Act PDFs scraped from India
+  public corpus of ~34,729 central _and state_ Act PDFs scraped from India
   Code directly, which is exactly the state-law coverage gap above. Read via
   HF's public, keyless `datasets-server` rows API (no scraping, no auth).
   Column names are matched against several candidates defensively since the

@@ -9,6 +9,7 @@ const NAV = [
   { href: '/chat', label: 'Legal chat' },
   { href: '/documents', label: 'Documents' },
   { href: '/advocates', label: 'Advocates' },
+  { href: '/consultations', label: 'Consultations' },
 ];
 
 export function SiteHeader() {

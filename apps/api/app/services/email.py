@@ -61,3 +61,10 @@ async def send_password_reset_email(*, to: str, token: str, settings: Settings) 
         body=f"Reset your password: {link}\n\nThis link expires in 1 hour. "
         "If you didn't request this, you can ignore this email.",
     )
+
+
+async def send_consultation_notification(*, to: str, subject: str, body: str) -> None:
+    """Consultation lifecycle events (Phase 8) share this sender so Phase 11
+    only has to swap ``get_email_sender()``'s implementation, not touch
+    every call site."""
+    await get_email_sender().send(to=to, subject=subject, body=body)
