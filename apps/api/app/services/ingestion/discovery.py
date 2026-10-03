@@ -46,10 +46,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.logging import get_logger
-from app.models.legal_document import DocumentType, IngestionStatus
+from app.models.legal_document import DocumentType, IngestionStatus, LegalDocument
 from app.models.legal_source_catalog import CatalogEntryStatus, LegalSourceCatalogEntry
 from app.services.ingestion.official_sources import OFFICIAL_SOURCES
-from app.services.ingestion.pipeline import ingest_source
+from app.services.ingestion.pipeline import ingest_source, reingest_source
 
 logger = get_logger("app.discovery")
 
@@ -350,17 +350,28 @@ async def ingest_catalog_entry(
 ) -> LegalSourceCatalogEntry:
     """Run a catalog entry through the normal ingestion pipeline and record
     the outcome on the entry itself (mirrors ``LegalDocument.ingestion_status``
-    rather than duplicating its error-reporting shape)."""
-    document = await ingest_source(
-        db=db,
-        settings=settings,
-        title=entry.title,
-        source_url=entry.source_url,
-        document_type=entry.document_type,
-        law_name=entry.law_name,
-        jurisdiction=entry.jurisdiction,
-        state_code=entry.state_code,
+    rather than duplicating its error-reporting shape).
+
+    Retrying an entry whose earlier attempt failed re-runs that same
+    ``LegalDocument`` instead of creating another failed row per retry."""
+    previous = (
+        await db.get(LegalDocument, entry.ingested_document_id)
+        if entry.ingested_document_id
+        else None
     )
+    if previous is not None:
+        document = await reingest_source(db=db, settings=settings, document=previous)
+    else:
+        document = await ingest_source(
+            db=db,
+            settings=settings,
+            title=entry.title,
+            source_url=entry.source_url,
+            document_type=entry.document_type,
+            law_name=entry.law_name,
+            jurisdiction=entry.jurisdiction,
+            state_code=entry.state_code,
+        )
     entry.status = (
         CatalogEntryStatus.INGESTED
         if document.ingestion_status == IngestionStatus.COMPLETED

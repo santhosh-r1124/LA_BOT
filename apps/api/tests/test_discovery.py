@@ -268,3 +268,65 @@ async def test_ingest_one_catalog_entry(
         f"/api/v1/admin/legal-sources/catalog/{entry.id}/ingest", headers=headers
     )
     assert resp.status_code == 422
+
+
+async def test_retrying_a_failed_entry_reuses_its_document(
+    db_client: AsyncClient, db_txn_session: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.errors import ValidationAppError
+    from app.models.legal_document import LegalDocument
+    from app.services.ingestion import pipeline as pipeline_module
+    from app.services.ingestion.chunk import Chunk
+    from app.services.ingestion.fetch import FetchedDocument
+
+    attempts = {"n": 0}
+
+    async def flaky_fetch(url: str, *, settings: Settings) -> FetchedDocument:
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise ValidationAppError("host unreachable", code="fetch_failed")
+        return FetchedDocument(
+            url=url, content_type="application/pdf", raw_bytes=b"x", checksum="c"
+        )
+
+    async def fake_embed(texts: list[str], *, settings: Settings) -> list[list[float]]:
+        return [[0.01] * 768 for _ in texts]
+
+    monkeypatch.setattr(pipeline_module, "fetch_document", flaky_fetch)
+    monkeypatch.setattr(pipeline_module, "extract_text", lambda document: "text")
+    monkeypatch.setattr(pipeline_module, "clean_document_text", lambda raw: raw)
+    monkeypatch.setattr(
+        pipeline_module,
+        "chunk_document",
+        lambda text, *, max_chars, overlap_chars: [
+            Chunk(content="body", section=None, article=None, page_number=1)
+        ],
+    )
+    monkeypatch.setattr(pipeline_module, "embed_texts", fake_embed)
+
+    headers = await _admin_headers(db_txn_session)
+    await run_discovery(db=db_txn_session, settings=get_settings(), provider_names=["curated"])
+    entry = (
+        await db_txn_session.execute(select(LegalSourceCatalogEntry).limit(1))  # type: ignore[attr-defined]
+    ).scalar_one()
+
+    first = await db_client.post(
+        f"/api/v1/admin/legal-sources/catalog/{entry.id}/ingest", headers=headers
+    )
+    assert first.json()["status"] == "INVALID"
+    second = await db_client.post(
+        f"/api/v1/admin/legal-sources/catalog/{entry.id}/ingest", headers=headers
+    )
+    assert second.json()["status"] == "INGESTED"
+    assert second.json()["ingested_document_id"] == first.json()["ingested_document_id"]
+
+    documents = (
+        (
+            await db_txn_session.execute(  # type: ignore[attr-defined]
+                select(LegalDocument).where(LegalDocument.source_url == entry.source_url)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(documents) == 1
