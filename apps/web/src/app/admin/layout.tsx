@@ -1,9 +1,9 @@
 'use client';
 
+import { hasAdminAccess } from '@legal-platform/shared';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
-import { ADMIN_ROLES } from '@/lib/admin-client';
 import { useAuth } from '@/lib/auth-context';
 
 const TABS = [
@@ -38,7 +38,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!ADMIN_ROLES.has(user.role)) {
+  if (!hasAdminAccess(user.role)) {
     return (
       <main className="page page-narrow">
         <p role="alert" className="alert alert-danger">

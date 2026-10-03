@@ -2,6 +2,7 @@ packages:
   - "apps/web"
   - "apps/advocate-portal"
   - "packages/*"
+  - "e2e"
 
 # Native/postinstall build scripts we explicitly trust (pnpm blocks the rest).
 allowBuilds:

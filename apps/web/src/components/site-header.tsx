@@ -1,10 +1,10 @@
 'use client';
 
+import { hasAdminAccess } from '@legal-platform/shared';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { NotificationBell } from '@/components/notification-bell';
-import { ADMIN_ROLES } from '@/lib/admin-client';
 import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
@@ -28,7 +28,7 @@ export function SiteHeader() {
     <span className="skeleton h-8 w-20" aria-hidden="true" />
   ) : user ? (
     <>
-      {ADMIN_ROLES.has(user.role) && (
+      {hasAdminAccess(user.role) && (
         <Link href="/admin" className="btn btn-ghost btn-sm">
           Admin
         </Link>

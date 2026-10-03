@@ -4,8 +4,6 @@ import { apiFetch } from './api-client';
 
 /** Bindings for the admin & legal-ops API (Phase 12). ADMIN / LEGAL_ADMIN only. */
 
-export const ADMIN_ROLES: ReadonlySet<string> = new Set(['ADMIN', 'LEGAL_ADMIN']);
-
 export interface Paginated<T> {
   items: T[];
   total: number;

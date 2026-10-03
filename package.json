@@ -25,7 +25,8 @@
     "kb:seed": "cd apps/api && uv run python -m app.scripts.seed_corpus",
     "kb:discover": "cd apps/api && uv run python -m app.scripts.discover_corpus",
     "kb:discover:ingest": "cd apps/api && uv run python -m app.scripts.discover_corpus --ingest",
-    "api:dev": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000"
+    "api:dev": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000",
+    "e2e": "pnpm --filter @legal-platform/e2e test:e2e"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

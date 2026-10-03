@@ -50,3 +50,8 @@ logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Playwright (e2e/)
+test-results/
+playwright-report/
+blob-report/
