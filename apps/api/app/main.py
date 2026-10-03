@@ -18,6 +18,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
 from app.middleware.request_context import RequestContextMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.services.redis import close_redis
 
 logger = get_logger("app.main")
@@ -58,6 +59,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
 
     app.add_middleware(RequestContextMiddleware)
+    # HSTS only where the API is actually served over HTTPS.
+    app.add_middleware(SecurityHeadersMiddleware, hsts=settings.app_env.is_production)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

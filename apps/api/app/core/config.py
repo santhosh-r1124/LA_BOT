@@ -11,8 +11,10 @@ import json
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_DEV_SECRETS = frozenset({"change-me-dev-only", "changeme", "secret", ""})
 
 
 class Environment(enum.StrEnum):
@@ -124,6 +126,9 @@ class Settings(BaseSettings):
     # Per-client-IP requests per minute on the AI endpoints (chat, document
     # drafting). Protects free-tier provider quotas. 0 disables the limiter.
     ai_rate_limit_per_minute: int = 20
+    # Per-IP attempts per minute on credential endpoints (login, register,
+    # password reset, ...) — brute-force/credential-stuffing brake. 0 disables.
+    auth_rate_limit_per_minute: int = 10
     # How long to cache query embeddings in Redis (repeat questions skip the
     # embedding API call). 0 disables the cache.
     embedding_cache_ttl_seconds: int = 24 * 60 * 60
@@ -141,6 +146,10 @@ class Settings(BaseSettings):
     ingestion_max_source_bytes: int = 25 * 1024 * 1024
     ingestion_chunk_max_chars: int = 1500
     ingestion_chunk_overlap_chars: int = 200
+    # SSRF defence (app/core/net_safety.py). Empty = any *public* host;
+    # set e.g. "indiacode.nic.in,legislative.gov.in,meity.gov.in" in
+    # production to fetch only from known government hosts.
+    ingestion_allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     # ---- Dynamic legal-source discovery (upgrade: dynamic sourcing) --------
     # Which discovery providers `kb:discover` runs, in order. "curated" is the
@@ -200,7 +209,11 @@ class Settings(BaseSettings):
     frontend_base_url: str = "http://localhost:3000"
 
     @field_validator(
-        "cors_origins", "legal_source_discovery_providers", "india_code_oai_paths", mode="before"
+        "cors_origins",
+        "legal_source_discovery_providers",
+        "india_code_oai_paths",
+        "ingestion_allowed_hosts",
+        mode="before",
     )
     @classmethod
     def _split_cors_origins(cls, value: object) -> object:
@@ -213,6 +226,21 @@ class Settings(BaseSettings):
                 return json.loads(stripped)
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
+
+    @model_validator(mode="after")
+    def _refuse_insecure_production(self) -> Settings:
+        """Fail fast at startup rather than run production with a guessable
+        token-signing key or a wildcard CORS policy (Phase 13)."""
+        if not self.app_env.is_production:
+            return self
+        problems = []
+        if self.jwt_secret in _DEV_SECRETS or len(self.jwt_secret) < 32:
+            problems.append("JWT_SECRET must be a random value of at least 32 characters")
+        if "*" in self.cors_origins:
+            problems.append("CORS_ORIGINS must list explicit origins, not '*'")
+        if problems:
+            raise ValueError("Refusing to start in production: " + "; ".join(problems) + ".")
+        return self
 
     @property
     def sqlalchemy_url_async(self) -> str:

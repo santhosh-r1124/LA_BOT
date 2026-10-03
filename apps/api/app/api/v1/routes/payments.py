@@ -26,6 +26,7 @@ from app.schemas.payment import (
     RefundRequest,
     RefundRequestedOut,
 )
+from app.services.audit import record_audit
 from app.services.payments.service import handle_webhook, request_refund
 
 router = APIRouter()
@@ -82,7 +83,7 @@ async def list_payments(
 async def refund_payment(
     payment_id: uuid.UUID,
     payload: RefundRequest,
-    _admin: AdminUser,
+    admin: AdminUser,
     db: DbSession,
     settings: SettingsDep,
 ) -> RefundRequestedOut:
@@ -90,6 +91,14 @@ async def refund_payment(
     if payment is None:
         raise NotFoundError("Payment not found.")
     refund = await request_refund(settings=settings, payment=payment, amount=payload.amount)
+    await record_audit(
+        db,
+        actor=admin,
+        action="payment.refund_requested",
+        target_type="payment",
+        target_id=payment.id,
+        details={"refund_id": refund.refund_id, "amount_minor": refund.amount},
+    )
     return RefundRequestedOut(
         refund_id=refund.refund_id, amount_minor=refund.amount, status=refund.status
     )

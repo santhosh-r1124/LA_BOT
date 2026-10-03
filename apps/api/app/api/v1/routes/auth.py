@@ -32,6 +32,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
 )
 from app.services.email import send_password_reset_email, send_verification_email
+from app.services.rate_limit import AuthRateLimit
 from app.services.tokens import issue_token_pair
 
 logger = get_logger("app.auth")
@@ -45,7 +46,9 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
     summary="Register a consumer account",
 )
-async def register(payload: RegisterRequest, db: DbSession, settings: SettingsDep) -> TokenPair:
+async def register(
+    _rate_limit: AuthRateLimit, payload: RegisterRequest, db: DbSession, settings: SettingsDep
+) -> TokenPair:
     email = payload.email.lower()
     existing = await db.scalar(select(User).where(User.email == email))
     if existing is not None:
@@ -77,7 +80,9 @@ async def register(payload: RegisterRequest, db: DbSession, settings: SettingsDe
 
 
 @router.post("/login", response_model=TokenPair, summary="Log in")
-async def login(payload: LoginRequest, db: DbSession, settings: SettingsDep) -> TokenPair:
+async def login(
+    _rate_limit: AuthRateLimit, payload: LoginRequest, db: DbSession, settings: SettingsDep
+) -> TokenPair:
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if user is None or not security.verify_password(payload.password, user.hashed_password):
         raise UnauthorizedError("Incorrect email or password.", code="invalid_credentials")
@@ -89,7 +94,9 @@ async def login(payload: LoginRequest, db: DbSession, settings: SettingsDep) -> 
 
 
 @router.post("/refresh", response_model=TokenPair, summary="Rotate the access/refresh token pair")
-async def refresh(payload: RefreshRequest, db: DbSession, settings: SettingsDep) -> TokenPair:
+async def refresh(
+    _rate_limit: AuthRateLimit, payload: RefreshRequest, db: DbSession, settings: SettingsDep
+) -> TokenPair:
     try:
         decoded = security.decode_token(
             payload.refresh_token, settings=settings, expected_type="refresh"
@@ -143,7 +150,9 @@ async def logout(payload: LogoutRequest, db: DbSession, settings: SettingsDep) -
 
 
 @router.post("/verify-email", response_model=MessageResponse, summary="Verify an email address")
-async def verify_email(payload: VerifyEmailRequest, db: DbSession) -> MessageResponse:
+async def verify_email(
+    _rate_limit: AuthRateLimit, payload: VerifyEmailRequest, db: DbSession
+) -> MessageResponse:
     token_hash = security.hash_token(payload.token)
     record = await db.scalar(
         select(EmailVerificationToken).where(EmailVerificationToken.token_hash == token_hash)
@@ -167,7 +176,10 @@ async def verify_email(payload: VerifyEmailRequest, db: DbSession) -> MessageRes
     "/resend-verification", response_model=MessageResponse, summary="Resend the verification email"
 )
 async def resend_verification(
-    payload: ResendVerificationRequest, db: DbSession, settings: SettingsDep
+    _rate_limit: AuthRateLimit,
+    payload: ResendVerificationRequest,
+    db: DbSession,
+    settings: SettingsDep,
 ) -> MessageResponse:
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     # Same response either way — don't leak whether the email exists or is verified.
@@ -192,7 +204,7 @@ async def resend_verification(
     "/forgot-password", response_model=MessageResponse, summary="Request a password reset link"
 )
 async def forgot_password(
-    payload: ForgotPasswordRequest, db: DbSession, settings: SettingsDep
+    _rate_limit: AuthRateLimit, payload: ForgotPasswordRequest, db: DbSession, settings: SettingsDep
 ) -> MessageResponse:
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if user is not None:
@@ -212,7 +224,9 @@ async def forgot_password(
 @router.post(
     "/reset-password", response_model=MessageResponse, summary="Reset password using a reset token"
 )
-async def reset_password(payload: ResetPasswordRequest, db: DbSession) -> MessageResponse:
+async def reset_password(
+    _rate_limit: AuthRateLimit, payload: ResetPasswordRequest, db: DbSession
+) -> MessageResponse:
     token_hash = security.hash_token(payload.token)
     record = await db.scalar(
         select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)

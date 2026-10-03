@@ -7,6 +7,7 @@ Alembic autogenerate (see ``migrations/env.py``).
 from __future__ import annotations
 
 from app.db.base import Base
+from app.models.audit import AuditEvent
 from app.models.chat import ChatMessage, Conversation, MessageRole
 from app.models.consultation import (
     Consultation,
@@ -32,6 +33,7 @@ from app.models.user import (
 __all__ = [
     "AdvocateProfile",
     "AssistantDocumentType",
+    "AuditEvent",
     "Base",
     "CatalogEntryStatus",
     "ChatMessage",

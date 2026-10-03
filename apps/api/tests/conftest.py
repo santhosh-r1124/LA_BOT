@@ -34,6 +34,7 @@ os.environ.setdefault(
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001")
 os.environ.setdefault("AI_RATE_LIMIT_PER_MINUTE", "0")
+os.environ.setdefault("AUTH_RATE_LIMIT_PER_MINUTE", "0")
 # No model provider configured unless a test opts in — keeps the suite
 # offline and makes the "not configured" paths deterministic.
 os.environ.setdefault("LLM_PROVIDER", "auto")

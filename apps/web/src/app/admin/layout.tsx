@@ -13,6 +13,7 @@ const TABS = [
   { href: '/admin/knowledge', label: 'Knowledge base' },
   { href: '/admin/payments', label: 'Payments' },
   { href: '/admin/users', label: 'Users' },
+  { href: '/admin/audit', label: 'Audit log' },
 ];
 
 /**

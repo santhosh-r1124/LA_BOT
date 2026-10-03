@@ -36,6 +36,7 @@ from app.schemas.legal_source_catalog import (
     PaginatedCatalogEntries,
     ProviderRunResultOut,
 )
+from app.services.audit import record_audit
 from app.services.ingestion.discovery import ingest_catalog_entry, run_discovery
 from app.services.ingestion.pipeline import ingest_source, reingest_source
 from app.services.ingestion.search import semantic_search
@@ -56,7 +57,7 @@ async def _get_document(db: DbSession, document_id: uuid.UUID) -> LegalDocument:
 
 @router.post("", response_model=LegalDocumentOut, summary="Ingest a new legal source")
 async def create_source(
-    payload: IngestSourceRequest, _admin: AdminUser, db: DbSession, settings: SettingsDep
+    payload: IngestSourceRequest, admin: AdminUser, db: DbSession, settings: SettingsDep
 ) -> LegalDocumentOut:
     document = await ingest_source(
         db=db,
@@ -69,6 +70,14 @@ async def create_source(
         state_code=payload.state_code,
         effective_date=payload.effective_date,
         version=payload.version,
+    )
+    await record_audit(
+        db,
+        actor=admin,
+        action="legal_source.ingested",
+        target_type="legal_document",
+        target_id=document.id,
+        details={"source_url": payload.source_url, "status": document.ingestion_status.value},
     )
     return LegalDocumentOut.model_validate(document)
 
@@ -142,12 +151,19 @@ async def search_sources(
     "/discover", response_model=DiscoverySummary, summary="Run discovery providers into the catalog"
 )
 async def discover_sources(
-    _admin: AdminUser,
+    admin: AdminUser,
     db: DbSession,
     settings: SettingsDep,
     providers: Annotated[list[str] | None, Query()] = None,
 ) -> DiscoverySummary:
     results = await run_discovery(db=db, settings=settings, provider_names=providers)
+    await record_audit(
+        db,
+        actor=admin,
+        action="legal_source.discovery_run",
+        target_type="legal_source_catalog",
+        details={r.provider: {"discovered": r.discovered, "error": r.error} for r in results},
+    )
     return DiscoverySummary(
         results=[
             ProviderRunResultOut(
@@ -209,7 +225,7 @@ async def list_catalog(
     summary="Ingest every NEW catalog entry matching the given filters",
 )
 async def ingest_catalog_bulk(
-    _admin: AdminUser,
+    admin: AdminUser,
     db: DbSession,
     settings: SettingsDep,
     jurisdiction: str | None = None,
@@ -233,6 +249,18 @@ async def ingest_catalog_bulk(
         ingested = await ingest_catalog_entry(db=db, settings=settings, entry=entry)
         if ingested.status == CatalogEntryStatus.INGESTED:
             completed += 1
+    await record_audit(
+        db,
+        actor=admin,
+        action="legal_source.catalog_batch_ingested",
+        target_type="legal_source_catalog",
+        details={
+            "attempted": len(entries),
+            "completed": completed,
+            "provider": provider,
+            "state_code": state_code,
+        },
+    )
     return BulkIngestResult(
         attempted=len(entries), completed=completed, failed=len(entries) - completed
     )
@@ -242,7 +270,7 @@ async def ingest_catalog_bulk(
     "/catalog/{entry_id}/ingest", response_model=CatalogEntryOut, summary="Ingest one catalog entry"
 )
 async def ingest_catalog_one(
-    entry_id: uuid.UUID, _admin: AdminUser, db: DbSession, settings: SettingsDep
+    entry_id: uuid.UUID, admin: AdminUser, db: DbSession, settings: SettingsDep
 ) -> CatalogEntryOut:
     entry = await db.get(LegalSourceCatalogEntry, entry_id)
     if entry is None:
@@ -252,6 +280,14 @@ async def ingest_catalog_one(
             "This catalog entry has already been ingested.", code="already_ingested"
         )
     entry = await ingest_catalog_entry(db=db, settings=settings, entry=entry)
+    await record_audit(
+        db,
+        actor=admin,
+        action="legal_source.catalog_entry_ingested",
+        target_type="legal_source_catalog",
+        target_id=entry.id,
+        details={"source_url": entry.source_url, "status": entry.status.value},
+    )
     return CatalogEntryOut.model_validate(entry)
 
 
@@ -267,15 +303,32 @@ async def get_source(document_id: uuid.UUID, _admin: AdminUser, db: DbSession) -
     summary="Re-fetch and re-chunk a source",
 )
 async def reindex_source(
-    document_id: uuid.UUID, _admin: AdminUser, db: DbSession, settings: SettingsDep
+    document_id: uuid.UUID, admin: AdminUser, db: DbSession, settings: SettingsDep
 ) -> LegalDocumentOut:
     document = await _get_document(db, document_id)
     document = await reingest_source(db=db, settings=settings, document=document)
+    await record_audit(
+        db,
+        actor=admin,
+        action="legal_source.reindexed",
+        target_type="legal_document",
+        target_id=document.id,
+        details={"status": document.ingestion_status.value},
+    )
     return LegalDocumentOut.model_validate(document)
 
 
 @router.delete("/{document_id}", status_code=204, summary="Remove an obsolete source")
-async def delete_source(document_id: uuid.UUID, _admin: AdminUser, db: DbSession) -> None:
+async def delete_source(document_id: uuid.UUID, admin: AdminUser, db: DbSession) -> None:
     document = await _get_document(db, document_id)
+    details: dict[str, object] = {"title": document.title, "source_url": document.source_url}
     await db.delete(document)
     await db.commit()
+    await record_audit(
+        db,
+        actor=admin,
+        action="legal_source.deleted",
+        target_type="legal_document",
+        target_id=document_id,
+        details=details,
+    )

@@ -83,6 +83,19 @@ export interface ProviderRunResult {
   error: string | null;
 }
 
+/** Mirrors `app/schemas/admin.py::AuditEventOut`. */
+export interface AuditEvent {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  details: Record<string, unknown> | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
 export const DISCOVERY_PROVIDERS = ['curated', 'india_code_oai', 'hf_dataset'] as const;
 
 function qs(params: Record<string, string | number | boolean | undefined | null>): string {
@@ -198,6 +211,12 @@ export const adminClient = {
     apiFetch<RiskReviewItem>(`/api/v1/admin/risk-review/${messageId}/review`, {
       method: 'POST',
       body: { note: note || null },
+      token,
+    }),
+
+  // ---- Audit log --------------------------------------------------------
+  audit: (token: string, params: { action?: string; offset?: number } = {}) =>
+    apiFetch<Paginated<AuditEvent>>(`/api/v1/admin/audit${qs({ ...params, limit: 50 })}`, {
       token,
     }),
 };

@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, require_roles
 from app.core.errors import NotFoundError, ValidationAppError
+from app.models.audit import AuditEvent
 from app.models.chat import ChatMessage, Conversation, MessageRole
 from app.models.consultation import Consultation
 from app.models.legal_document import LegalDocument
@@ -26,7 +27,9 @@ from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
 from app.schemas.admin import (
     AdminAdvocateOut,
     AdminOverview,
+    AuditEventOut,
     PaginatedAdminAdvocates,
+    PaginatedAuditEvents,
     PaginatedRiskReview,
     PaginatedUsers,
     RiskReviewItem,
@@ -35,6 +38,7 @@ from app.schemas.admin import (
 )
 from app.schemas.advocate import AdvocateProfileOut, AdvocateRejectRequest, AdvocateVerifyRequest
 from app.schemas.user import UserOut
+from app.services.audit import record_audit
 from app.services.notifications import notify
 
 router = APIRouter()
@@ -71,16 +75,24 @@ async def list_users(
 
 @router.patch("/users/{user_id}", response_model=UserOut, summary="Activate or suspend a user")
 async def set_user_active(
-    user_id: uuid.UUID, payload: UserActiveUpdateRequest, _admin: AdminUser, db: DbSession
+    user_id: uuid.UUID, payload: UserActiveUpdateRequest, admin: AdminUser, db: DbSession
 ) -> UserOut:
     user = await db.get(User, user_id)
     if user is None:
         raise NotFoundError("User not found.")
-    if user.id == _admin.id and not payload.is_active:
+    if user.id == admin.id and not payload.is_active:
         raise ValidationAppError("You can't suspend your own account.", code="cannot_suspend_self")
     user.is_active = payload.is_active
     await db.commit()
     await db.refresh(user)
+    await record_audit(
+        db,
+        actor=admin,
+        action="user.activated" if payload.is_active else "user.suspended",
+        target_type="user",
+        target_id=user.id,
+        details={"email": user.email},
+    )
     return UserOut.model_validate(user)
 
 
@@ -135,7 +147,7 @@ async def list_pending_advocates(
     summary="Approve an advocate",
 )
 async def verify_advocate(
-    profile_id: uuid.UUID, payload: AdvocateVerifyRequest, _admin: AdminUser, db: DbSession
+    profile_id: uuid.UUID, payload: AdvocateVerifyRequest, admin: AdminUser, db: DbSession
 ) -> AdvocateProfileOut:
     profile = await db.get(AdvocateProfile, profile_id)
     if profile is None:
@@ -144,6 +156,14 @@ async def verify_advocate(
     profile.verification_note = payload.note
     await db.commit()
     await db.refresh(profile)
+    await record_audit(
+        db,
+        actor=admin,
+        action="advocate.verified",
+        target_type="advocate_profile",
+        target_id=profile.id,
+        details={"note": payload.note},
+    )
     advocate = await db.get(User, profile.user_id)
     if advocate is not None:
         await notify(
@@ -167,7 +187,7 @@ async def verify_advocate(
     summary="Reject an advocate",
 )
 async def reject_advocate(
-    profile_id: uuid.UUID, payload: AdvocateRejectRequest, _admin: AdminUser, db: DbSession
+    profile_id: uuid.UUID, payload: AdvocateRejectRequest, admin: AdminUser, db: DbSession
 ) -> AdvocateProfileOut:
     profile = await db.get(AdvocateProfile, profile_id)
     if profile is None:
@@ -176,6 +196,14 @@ async def reject_advocate(
     profile.verification_note = payload.note
     await db.commit()
     await db.refresh(profile)
+    await record_audit(
+        db,
+        actor=admin,
+        action="advocate.rejected",
+        target_type="advocate_profile",
+        target_id=profile.id,
+        details={"note": payload.note},
+    )
     advocate = await db.get(User, profile.user_id)
     if advocate is not None:
         await notify(
@@ -330,6 +358,14 @@ async def mark_risk_reviewed(
     message.reviewed_by_id = admin.id
     message.review_note = payload.note
     await db.commit()
+    await record_audit(
+        db,
+        actor=admin,
+        action="risk_query.reviewed",
+        target_type="chat_message",
+        target_id=message.id,
+        details={"risk_level": message.risk_level},
+    )
     conversation = await db.get(Conversation, message.conversation_id)
     return RiskReviewItem(
         id=message.id,
@@ -343,4 +379,47 @@ async def mark_risk_reviewed(
         created_at=message.created_at,
         reviewed_at=message.reviewed_at,
         review_note=message.review_note,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Audit log (Phase 13) — read-only by design
+# ---------------------------------------------------------------------------
+
+
+@router.get("/audit", response_model=PaginatedAuditEvents, summary="Admin audit log")
+async def list_audit_events(
+    _admin: AdminUser,
+    db: DbSession,
+    action: str | None = None,
+    actor_email: str | None = None,
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> PaginatedAuditEvents:
+    conditions = []
+    if action:
+        conditions.append(AuditEvent.action == action)
+    if actor_email:
+        conditions.append(AuditEvent.actor_email == actor_email.lower())
+    total = (
+        await db.execute(select(func.count()).select_from(AuditEvent).where(*conditions))
+    ).scalar_one()
+    rows = (
+        (
+            await db.execute(
+                select(AuditEvent)
+                .where(*conditions)
+                .order_by(AuditEvent.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return PaginatedAuditEvents(
+        items=[AuditEventOut.model_validate(e) for e in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

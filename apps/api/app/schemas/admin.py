@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.advocate import AdvocateProfileOut
 from app.schemas.user import UserOut
@@ -77,3 +77,24 @@ class AdminOverview(BaseModel):
     legal_documents_by_status: dict[str, int]
     catalog_by_status: dict[str, int]
     risk_review_pending: int
+
+
+class AuditEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    actor_id: uuid.UUID | None
+    actor_email: str | None
+    action: str
+    target_type: str
+    target_id: str | None
+    details: dict[str, object] | None
+    ip_address: str | None
+    created_at: datetime
+
+
+class PaginatedAuditEvents(BaseModel):
+    items: list[AuditEventOut]
+    total: int
+    limit: int
+    offset: int

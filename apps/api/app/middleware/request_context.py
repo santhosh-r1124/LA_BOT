@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,6 +18,10 @@ logger = get_logger("app.access")
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
+# Read by app/services/audit.py so audit rows carry the caller's address
+# without every handler having to accept a Request.
+current_client_ip: ContextVar[str | None] = ContextVar("current_client_ip", default=None)
+
 # Paths that should not emit an access log line (keeps health-check noise down).
 _QUIET_PATHS = frozenset({"/health", "/health/ready"})
 
@@ -28,6 +33,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         incoming = request.headers.get(REQUEST_ID_HEADER)
         request_id = incoming if incoming and len(incoming) <= 128 else uuid.uuid4().hex
         request.state.request_id = request_id
+        current_client_ip.set(request.client.host if request.client else None)
 
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(
