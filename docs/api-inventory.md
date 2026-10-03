@@ -11,16 +11,20 @@ using a local Ollama model plus Gemini for embeddings.
 
 ## Summary
 
-| Service                               | Needed for                                         | Free?                | Key required   | Env var(s)                           |
-| ------------------------------------- | -------------------------------------------------- | -------------------- | -------------- | ------------------------------------ |
-| Google Gemini API — embeddings        | Knowledge-base indexing + chat retrieval           | ✅ free tier         | Yes            | `GEMINI_API_KEY`, `EMBEDDING_MODEL`  |
-| Google Gemini API — chat model        | Classification, answers, drafts (default provider) | ✅ free tier         | Yes (same key) | `GEMINI_API_KEY`, `GEMINI_LLM_MODEL` |
-| GroqCloud                             | Alternative chat model provider                    | ✅ free plan         | Yes            | `GROQ_API_KEY`, `GROQ_MODEL`         |
-| Ollama (local)                        | Alternative chat model provider, fully offline     | ✅ free, open source | No             | `OLLAMA_BASE_URL`, `OLLAMA_MODEL`    |
-| Anthropic Claude                      | Alternative chat model provider                    | ❌ paid              | Yes            | `ANTHROPIC_API_KEY`, `LLM_MODEL`     |
-| India Code / Legislative Dept / MeitY | Source documents for the knowledge base            | ✅ public            | No             | — (URLs in `official_sources.py`)    |
-| PostgreSQL 16 + pgvector              | All persistence + vector search                    | ✅ open source       | —              | `DATABASE_URL`, `DATABASE_URL_SYNC`  |
-| Redis 7                               | Rate limiting, query-embedding cache               | ✅ open source       | —              | `REDIS_URL`                          |
+| Service                               | Needed for                                               | Free?                                    | Key required      | Env var(s)                                                          |
+| ------------------------------------- | -------------------------------------------------------- | ---------------------------------------- | ----------------- | ------------------------------------------------------------------- |
+| Google Gemini API — embeddings        | Knowledge-base indexing + chat retrieval                 | ✅ free tier                             | Yes               | `GEMINI_API_KEY`, `EMBEDDING_MODEL`                                 |
+| Google Gemini API — chat model        | Classification, answers, drafts (default provider)       | ✅ free tier                             | Yes (same key)    | `GEMINI_API_KEY`, `GEMINI_LLM_MODEL`                                |
+| GroqCloud                             | Alternative chat model provider                          | ✅ free plan                             | Yes               | `GROQ_API_KEY`, `GROQ_MODEL`                                        |
+| Ollama (local)                        | Alternative chat model provider, fully offline           | ✅ free, open source                     | No                | `OLLAMA_BASE_URL`, `OLLAMA_MODEL`                                   |
+| Anthropic Claude                      | Alternative chat model provider                          | ❌ paid                                  | Yes               | `ANTHROPIC_API_KEY`, `LLM_MODEL`                                    |
+| India Code / Legislative Dept / MeitY | Source documents for the knowledge base                  | ✅ public                                | No                | — (`curated` provider, `official_sources.py`)                       |
+| India Code OAI-PMH feed               | Dynamic discovery of Acts (`india_code_oai`)             | ✅ public                                | No                | `INDIA_CODE_BASE_URL`, `INDIA_CODE_OAI_PATHS`, `INDIA_CODE_OAI_SET` |
+| Hugging Face datasets-server          | Dynamic discovery of central + state Acts (`hf_dataset`) | ✅ public                                | No                | `HF_DATASET_ID`, `HF_DATASET_MAX_ROWS`                              |
+| Razorpay                              | Consultation payments, refunds, webhooks                 | ✅ test mode; live = per-transaction fee | Yes               | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` |
+| Any SMTP relay (Brevo, Resend, SES…)  | Transactional email                                      | ✅ several free tiers                    | Yes (relay creds) | `EMAIL_BACKEND`, `SMTP_*`, `EMAIL_FROM`                             |
+| PostgreSQL 16 + pgvector              | All persistence + vector search                          | ✅ open source                           | —                 | `DATABASE_URL`, `DATABASE_URL_SYNC`                                 |
+| Redis 7                               | Rate limiting, query-embedding cache                     | ✅ open source                           | —                 | `REDIS_URL`                                                         |
 
 Provider selection is `LLM_PROVIDER` (`auto` \| `gemini` \| `groq` \| `ollama`
 \| `anthropic`). `auto` uses the first _configured_ provider in the order
@@ -113,3 +117,20 @@ never see a key: they talk to the API, and the only public variables are
   query embedding from Redis instead of calling the embedding API.
 - Classification + answer are two model calls per chat turn; out-of-scope and
   no-evidence turns skip the second call.
+
+---
+
+## Added in the marketplace build-out (Phases 8–13)
+
+Each of these is optional: with nothing configured the platform still runs,
+and each failure mode is explicit rather than silent.
+
+| Service                          | Failure / unconfigured behaviour                                                                                                 | Details                                                                                                                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **India Code OAI-PMH**           | Provider recorded as failed with the reason (wrong path, unreachable); other providers still run.                                | [ADR 0011](adr/0011-dynamic-source-discovery.md). Path/set not verified live from the build sandbox.                                                 |
+| **Hugging Face datasets-server** | Same; an unrecognised schema reports the columns it saw.                                                                         | `RUDXLABS/india-central-state-acts` (~34.7k central + state Act PDFs). Column mapping inferred, not verified live.                                   |
+| **Razorpay**                     | Checkout returns `503 payments_not_configured`; bookings work, fees show "Unpaid".                                               | [ADR 0012](adr/0012-payments-provider.md). Test-mode keys are free: <https://dashboard.razorpay.com>. Webhook: `/api/v1/payments/webhooks/razorpay`. |
+| **SMTP relay**                   | `EMAIL_BACKEND=console` logs emails; a failed send is logged, never fails the request; in-app notifications are always recorded. | [ADR 0013](adr/0013-notifications.md).                                                                                                               |
+
+SMS is deliberately absent: commercial SMS in India requires DLT template
+registration first (ADR 0013).

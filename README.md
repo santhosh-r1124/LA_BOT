@@ -8,14 +8,19 @@ The AI answers are **grounded in verified Indian legal sources via RAG**, not th
 LLM's parametric memory. For matters needing professional help, the platform
 routes users to a qualified advocate rather than acting as one.
 
-> **Phases 0–7 are done**: foundation, authentication & RBAC, the legal
-> knowledge-base ingestion pipeline, production RAG (hybrid search +
-> grounded, cited, **streamed** chat answers), risk scoring, a
-> document-drafting assistant, and advocate marketplace discovery.
-> **Runs entirely on free services**: one free Google AI Studio key (or a
-> local Ollama model) — see [`docs/api-inventory.md`](docs/api-inventory.md).
-> Load the official legal corpus with `pnpm kb:seed`; until then chat
-> correctly answers "insufficient verified information".
+> **All MVP features are built** (Phases 0–14): auth & RBAC, grounded and
+> **streamed** legal chat over a hybrid-search RAG index, risk scoring, the
+> document assistant, advocate discovery, **consultation booking**, the
+> advocate dashboard, **Razorpay payments**, in-app + email
+> **notifications**, an **admin & legal-ops console**, security hardening,
+> and a browser E2E suite. Legal sources are found **dynamically** (India
+> Code OAI-PMH, an open central + state Acts corpus, plus a curated list).
+> **Runs entirely on free services** — see
+> [`docs/api-inventory.md`](docs/api-inventory.md). Payments and email need
+> your own accounts and stay safely "not configured" until you add them.
+> Load the legal corpus from `/admin/knowledge` or `pnpm kb:discover:ingest`;
+> until then chat correctly answers "insufficient verified information".
+> Going live: [`infrastructure/deployment/README.md`](infrastructure/deployment/README.md).
 >
 > Status per feature (based on the code, not the UI):
 > [`docs/project-status.md`](docs/project-status.md) · phase plan:
@@ -159,7 +164,9 @@ on the host — see the comments in `.env.example`.
 | `pnpm stack:up` / `stack:down`| Start / stop the Docker stack               |
 | `pnpm db:migrate`             | Apply Alembic migrations                    |
 | `pnpm db:revision -- "msg"`   | Autogenerate a new migration                |
-| `pnpm kb:seed`                | Index the official Indian legal sources     |
+| `pnpm kb:seed`                | Index the curated official Indian sources   |
+| `pnpm kb:discover[:ingest]`   | Discover (and ingest) Indian legal sources dynamically |
+| `pnpm e2e`                    | Browser end-to-end journey (needs Postgres + Redis) |
 | `cd apps/api && uv run pytest`| Run backend tests                           |
 | `cd apps/api && uv run ruff check . && uv run mypy .` | Lint + type-check backend |
 
