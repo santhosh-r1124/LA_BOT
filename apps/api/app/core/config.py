@@ -142,11 +142,39 @@ class Settings(BaseSettings):
     ingestion_chunk_max_chars: int = 1500
     ingestion_chunk_overlap_chars: int = 200
 
+    # ---- Dynamic legal-source discovery (upgrade: dynamic sourcing) --------
+    # Which discovery providers `kb:discover` runs, in order. "curated" is the
+    # hand-verified fallback (app/services/ingestion/official_sources.py);
+    # "india_code_oai" and "hf_dataset" are live crawlers — see
+    # app/services/ingestion/discovery.py and docs/adr/0011.
+    legal_source_discovery_providers: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["curated"]
+    )
+    # India Code is a DSpace repository (its /handle/ and /bitstream/ URL
+    # pattern is DSpace's signature) — DSpace exposes a standard OAI-PMH feed.
+    # The exact path can vary by DSpace version/deployment; the provider tries
+    # each of these in order and records which worked.
+    india_code_base_url: str = "https://www.indiacode.nic.in"
+    india_code_oai_paths: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["/oai/request", "/server/oai/request"]
+    )
+    india_code_oai_set: str | None = None
+    india_code_oai_page_limit: int = 20  # resumption-token pages per run, not documents
+    # Pre-scraped open corpus of ~34.7k central+state Act PDFs (see
+    # docs/adr/0011) via HF's public, keyless datasets-server API.
+    hf_dataset_id: str = "RUDXLABS/india-central-state-acts"
+    hf_dataset_config: str = "default"
+    hf_dataset_split: str = "train"
+    hf_dataset_page_size: int = 100
+    hf_dataset_max_rows: int = 2000
+
     # ---- Frontend (Phase 1+) ------------------------------------------
     # Base URL used to build links inside emails (verify-email, reset-password).
     frontend_base_url: str = "http://localhost:3000"
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator(
+        "cors_origins", "legal_source_discovery_providers", "india_code_oai_paths", mode="before"
+    )
     @classmethod
     def _split_cors_origins(cls, value: object) -> object:
         """Accept a comma-separated string or a JSON array as well as a list."""

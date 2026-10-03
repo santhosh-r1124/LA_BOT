@@ -23,6 +23,8 @@
     "db:migrate": "cd apps/api && uv run alembic upgrade head",
     "db:revision": "cd apps/api && uv run alembic revision --autogenerate -m",
     "kb:seed": "cd apps/api && uv run python -m app.scripts.seed_corpus",
+    "kb:discover": "cd apps/api && uv run python -m app.scripts.discover_corpus",
+    "kb:discover:ingest": "cd apps/api && uv run python -m app.scripts.discover_corpus --ingest",
     "api:dev": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000"
   },
   "devDependencies": {

@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.models.chat import ChatMessage, Conversation, MessageRole
 from app.models.document_request import AssistantDocumentType, DocumentRequest
 from app.models.legal_document import DocumentType, IngestionStatus, LegalChunk, LegalDocument
+from app.models.legal_source_catalog import CatalogEntryStatus, LegalSourceCatalogEntry
 from app.models.user import (
     AdvocateProfile,
     EmailVerificationToken,
@@ -24,6 +25,7 @@ __all__ = [
     "AdvocateProfile",
     "AssistantDocumentType",
     "Base",
+    "CatalogEntryStatus",
     "ChatMessage",
     "Conversation",
     "DocumentRequest",
@@ -32,6 +34,7 @@ __all__ = [
     "IngestionStatus",
     "LegalChunk",
     "LegalDocument",
+    "LegalSourceCatalogEntry",
     "MessageRole",
     "PasswordResetToken",
     "RefreshToken",
