@@ -78,3 +78,27 @@ async def enforce_ai_rate_limit(
 
 
 AIRateLimit = Annotated[None, Depends(enforce_ai_rate_limit)]
+
+
+async def enforce_auth_rate_limit(request: Request, settings: SettingsDep, redis: RedisDep) -> None:
+    """Per-IP brake on credential endpoints (Phase 13). Keyed by IP only —
+    these callers are by definition not authenticated yet. Fails open like
+    the AI limiter."""
+    limit = settings.auth_rate_limit_per_minute
+    if limit <= 0:
+        return
+    try:
+        allowed, retry_after = await hit(
+            redis, bucket="auth", key=client_key(request, None), limit=limit
+        )
+    except Exception as exc:
+        logger.warning("rate_limit_unavailable", error_type=type(exc).__name__)
+        return
+    if not allowed:
+        raise RateLimitedError(
+            f"Too many attempts. Please wait {retry_after}s and try again.",
+            retry_after=retry_after,
+        )
+
+
+AuthRateLimit = Annotated[None, Depends(enforce_auth_rate_limit)]

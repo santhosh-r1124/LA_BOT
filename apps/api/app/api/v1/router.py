@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import admin, advocates, auth, chat, documents, legal_sources, meta, users
+from app.api.v1.routes import (
+    admin,
+    advocates,
+    auth,
+    chat,
+    consultations,
+    documents,
+    legal_sources,
+    meta,
+    notifications,
+    payments,
+    users,
+)
 
 api_router = APIRouter()
 api_router.include_router(meta.router, tags=["meta"])
@@ -13,6 +25,10 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(advocates.router, prefix="/advocates", tags=["advocates"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
+api_router.include_router(consultations.router, prefix="/consultations", tags=["consultations"])
+api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
+api_router.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+api_router.include_router(payments.admin_router, prefix="/admin/payments", tags=["admin"])
 api_router.include_router(
     legal_sources.router, prefix="/admin/legal-sources", tags=["legal-sources"]
 )

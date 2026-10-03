@@ -16,6 +16,10 @@ decision, numbered sequentially. Status: `Proposed` → `Accepted` →
 | 0008 | Risk scoring folded into the existing classification call, not a second LLM call | Accepted |
 | 0009 | Document Assistant: static questionnaire, not RAG-grounded, failures not persisted | Accepted |
 | 0010 | Provider-agnostic LLM layer (free providers first) and streamed chat | Accepted |
+| 0011 | Dynamic legal-source discovery replaces the static catalogue | Accepted |
+| 0012 | Payments: Razorpay behind a gateway interface, webhook as source of truth | Accepted |
+| 0013 | Notifications: in-app feed as the record, email as a best-effort copy, no SMS | Accepted |
+| 0014 | Security hardening: SSRF guard, auth throttling, audit trail, prompt fencing | Accepted |
 
 ## Template
 

@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { consultationClient } from '@/lib/consultation-client';
 
 const STATUS: Record<string, { label: string; className: string; next: string }> = {
   PENDING: {
@@ -26,18 +28,46 @@ const STATUS: Record<string, { label: string; className: string; next: string }>
   },
 };
 
-// Planned portal features (roadmap Phase 9). Listed plainly as not yet
-// available — no placeholder counts or fake activity.
-const PLANNED = [
-  'Consultation requests',
-  'Scheduling & availability',
-  'Client messaging',
-  'Document exchange',
-  'Earnings',
-];
+// Still-planned portal features. Listed plainly as not yet available — no
+// placeholder counts or fake activity. Consultation requests/matters moved
+// out of this list in Phase 9, now that they're real (app/consultations).
+// Earnings needs Phase 10 (payments) before any figure here would be real.
+const PLANNED = ['Scheduling & availability sync', 'Client messaging', 'Document exchange'];
+
+interface RequestCounts {
+  pending: number;
+  upcoming: number;
+  completed: number;
+}
 
 export default function AdvocatePortalHome() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, accessToken, loading } = useAuth();
+  const [counts, setCounts] = useState<RequestCounts | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    Promise.all([
+      consultationClient.listMine(accessToken, 'REQUESTED'),
+      consultationClient.listMine(accessToken, 'ACCEPTED'),
+      consultationClient.listMine(accessToken, 'COMPLETED'),
+    ])
+      .then(([pending, upcoming, completed]) => {
+        if (!cancelled) {
+          setCounts({
+            pending: pending.total,
+            upcoming: upcoming.total,
+            completed: completed.total,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
 
   if (loading) {
     return (
@@ -112,6 +142,39 @@ export default function AdvocatePortalHome() {
             View profile
           </Link>
         )}
+      </section>
+
+      <section className="surface mt-6 p-5" aria-labelledby="requests-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="requests-heading" className="font-semibold">
+            Consultation requests
+          </h2>
+          <Link href="/consultations" className="btn btn-secondary btn-sm">
+            View all
+          </Link>
+        </div>
+        {counts === null ? (
+          <p className="muted mt-3 text-sm">Loading…</p>
+        ) : (
+          <dl className="mt-4 grid grid-cols-3 gap-3 text-center">
+            <div className="surface-flat p-3">
+              <dt className="subtle text-xs">Awaiting response</dt>
+              <dd className="mt-1 text-xl font-semibold">{counts.pending}</dd>
+            </div>
+            <div className="surface-flat p-3">
+              <dt className="subtle text-xs">Scheduled</dt>
+              <dd className="mt-1 text-xl font-semibold">{counts.upcoming}</dd>
+            </div>
+            <div className="surface-flat p-3">
+              <dt className="subtle text-xs">Completed, awaiting close</dt>
+              <dd className="mt-1 text-xl font-semibold">{counts.completed}</dd>
+            </div>
+          </dl>
+        )}
+        <p className="subtle mt-3 text-xs">
+          Earnings aren&apos;t shown yet — payments aren&apos;t wired up (roadmap Phase 10), so a
+          figure here would be fake.
+        </p>
       </section>
 
       <section className="mt-8" aria-labelledby="planned-heading">

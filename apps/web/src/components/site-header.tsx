@@ -1,14 +1,17 @@
 'use client';
 
+import { hasAdminAccess } from '@legal-platform/shared';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { NotificationBell } from '@/components/notification-bell';
 import { useAuth } from '@/lib/auth-context';
 
 const NAV = [
   { href: '/chat', label: 'Legal chat' },
   { href: '/documents', label: 'Documents' },
   { href: '/advocates', label: 'Advocates' },
+  { href: '/consultations', label: 'Consultations' },
 ];
 
 export function SiteHeader() {
@@ -24,9 +27,17 @@ export function SiteHeader() {
   const account = loading ? (
     <span className="skeleton h-8 w-20" aria-hidden="true" />
   ) : user ? (
-    <Link href="/profile" className="btn btn-ghost btn-sm max-w-[14rem] truncate">
-      {user.display_name || user.email}
-    </Link>
+    <>
+      {hasAdminAccess(user.role) && (
+        <Link href="/admin" className="btn btn-ghost btn-sm">
+          Admin
+        </Link>
+      )}
+      <NotificationBell />
+      <Link href="/profile" className="btn btn-ghost btn-sm max-w-[14rem] truncate">
+        {user.display_name || user.email}
+      </Link>
+    </>
   ) : (
     <>
       <Link href="/login" className="btn btn-ghost btn-sm">

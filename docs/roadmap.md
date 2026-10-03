@@ -3,25 +3,25 @@
 16 phases from architecture to production launch. Each phase has a concrete
 deliverable and builds on the previous one.
 
-| Phase | Name                          | Deliverable                                                        | Status |
-| ----- | ----------------------------- | ---------------------------------------------------------------- | ------ |
-| 0     | Architecture                  | Running production-style skeleton: frontend + backend + database | ✅ Done |
-| 1     | Authentication                | Full auth + RBAC (CONSUMER, ADVOCATE, ADMIN, LEGAL_ADMIN, ENTERPRISE_USER) | ✅ Done |
-| 2     | Public AI Chat                | Working public Indian legal-information chatbot                   | ✅ Done (no retrieval grounding yet — see below) |
-| 3     | Indian Legal Knowledge Base   | Searchable, source-grounded legal repository (ingestion pipeline) | ✅ Done (pipeline + storage; bulk corpus population is follow-up) |
-| 4     | RAG Engine                    | Production Indian legal RAG (hybrid search + rerank + guardrails) | ✅ Done (wired into chat; most answers are "insufficient evidence" until a corpus is loaded) |
-| 5     | Classification & Guardrails   | Legal category classifier + LOW/MEDIUM/HIGH/CRITICAL risk engine  | ✅ Done |
-| 6     | Document Assistant            | Consumer legal-document questionnaire + draft/template generation | ✅ Done |
-| 7     | Advocate Marketplace          | Advocate discovery with filters + profiles                       | ✅ Done |
-| 8     | On-Demand Consultation        | End-to-end booking → payment → consultation → matter closed      | ⬜ Not started |
-| 9     | Advocate Portal               | Advocate operating dashboard (requests, matters, docs, earnings)  | ⬜ Not started |
-| 10    | Payments                      | Consultation + document-service payments, refunds, invoices       | ⬜ Not started |
-| 11    | Notifications                 | Email / SMS / OTP / in-app across all lifecycle events            | ⬜ Not started |
-| 12    | Admin & Legal Ops Dashboard   | User/advocate/RAG-source management, high-risk query review       | ⬜ Not started |
-| 13    | Security & Compliance         | Hardening: rate limiting, prompt-injection defence, audit logs, tenant isolation | ⬜ Not started |
-| 14    | Testing                       | Unit + integration + browser E2E coverage                        | 🟡 Scaffolding only |
-| 15    | Production Deployment          | Cloud hosting, managed Postgres/Redis, monitoring, CI/CD, backups | 🟡 Scaffolding only |
-| 16    | Launch                        | MVP: Chat + Document Assistant + Advocate Search + Booking        | ⬜ Not started |
+| Phase | Name                        | Deliverable                                                                      | Status                                                                                       |
+| ----- | --------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 0     | Architecture                | Running production-style skeleton: frontend + backend + database                 | ✅ Done                                                                                      |
+| 1     | Authentication              | Full auth + RBAC (CONSUMER, ADVOCATE, ADMIN, LEGAL_ADMIN, ENTERPRISE_USER)       | ✅ Done                                                                                      |
+| 2     | Public AI Chat              | Working public Indian legal-information chatbot                                  | ✅ Done (no retrieval grounding yet — see below)                                             |
+| 3     | Indian Legal Knowledge Base | Searchable, source-grounded legal repository (ingestion pipeline)                | ✅ Done (pipeline + storage; bulk corpus population is follow-up)                            |
+| 4     | RAG Engine                  | Production Indian legal RAG (hybrid search + rerank + guardrails)                | ✅ Done (wired into chat; most answers are "insufficient evidence" until a corpus is loaded) |
+| 5     | Classification & Guardrails | Legal category classifier + LOW/MEDIUM/HIGH/CRITICAL risk engine                 | ✅ Done                                                                                      |
+| 6     | Document Assistant          | Consumer legal-document questionnaire + draft/template generation                | ✅ Done                                                                                      |
+| 7     | Advocate Marketplace        | Advocate discovery with filters + profiles                                       | ✅ Done                                                                                      |
+| 8     | On-Demand Consultation      | End-to-end booking → payment → consultation → matter closed                      | ✅ Done                                                                                      |
+| 9     | Advocate Portal             | Advocate operating dashboard (requests, matters, docs, earnings)                 | ✅ Done (earnings/doc exchange wait on live payments)                                        |
+| 10    | Payments                    | Consultation + document-service payments, refunds, invoices                      | 🟢 Code-complete (Razorpay; needs your keys — consultations only, receipts not GST invoices) |
+| 11    | Notifications               | Email / SMS / OTP / in-app across all lifecycle events                           | ✅ Done (in-app + SMTP email; no SMS — DLT registration)                                     |
+| 12    | Admin & Legal Ops Dashboard | User/advocate/RAG-source management, high-risk query review                      | ✅ Done                                                                                      |
+| 13    | Security & Compliance       | Hardening: rate limiting, prompt-injection defence, audit logs, tenant isolation | ✅ Done (no tenant model to isolate yet; DPDP export/erasure open)                           |
+| 14    | Testing                     | Unit + integration + browser E2E coverage                                        | ✅ Done                                                                                      |
+| 15    | Production Deployment       | Cloud hosting, managed Postgres/Redis, monitoring, CI/CD, backups                | 🟡 Ready to deploy — CI, images, runbook; hosting not provisioned                            |
+| 16    | Launch                      | MVP: Chat + Document Assistant + Advocate Search + Booking                       | 🟡 MVP features built; launch = runbook + content load + legal sign-off                      |
 
 ## Phase 1 — what shipped
 
@@ -35,7 +35,7 @@ deliverable and builds on the previous one.
 - JWT access tokens + DB-backed, rotating refresh tokens (revocable — real
   logout). RBAC via `require_roles(...)` dependency.
 - Frontend: `apps/web` has `/register /login /verify-email /reset-password
-  /profile`; `apps/advocate-portal` has `/register /login /profile`.
+/profile`; `apps/advocate-portal` has `/register /login /profile`.
 
 ## Phase 2 — what shipped
 
@@ -225,7 +225,36 @@ deliverable and builds on the previous one.
   inserts failed on Postgres); web client's 10s timeout aborted normal
   AI requests; test-suite event-loop leak.
 
-Per-feature status: [project-status.md](project-status.md).
+## Dynamic source discovery (2026-10-03)
+
+- `legal_source_catalog` + pluggable providers replace the hand-typed
+  source list: `curated` (the original 15), `india_code_oai` (India Code's
+  DSpace OAI-PMH feed) and `hf_dataset` (~34.7k central + state Act PDFs).
+  Admin UI at `/admin/knowledge`; `pnpm kb:discover[:ingest]`.
+  [ADR 0011](adr/0011-dynamic-source-discovery.md).
+
+## Phases 8–14 — what shipped (2026-10-03)
+
+- **8 Consultation booking** — `consultations` table and lifecycle
+  (`consultation_lifecycle.py`); booking form on advocate profiles, consumer
+  `/consultations`, advocate accept/decline/complete/close.
+- **9 Advocate dashboard** — live request counts on the portal home.
+- **10 Payments** — Razorpay orders, checkout + webhook signature
+  verification, admin refunds, per-attempt `payments` rows, "Pay" button.
+  [ADR 0012](adr/0012-payments-provider.md).
+- **11 Notifications** — `notifications` table, bell + feed in both apps,
+  SMTP delivery. [ADR 0013](adr/0013-notifications.md).
+- **12 Admin console** — `/admin` in the web app: overview, verification,
+  high-risk review (with reviewed state), knowledge base, payments, users,
+  audit log.
+- **13 Security** — SSRF guard, auth throttling, production config guard,
+  security headers, audit trail, prompt fencing.
+  [ADR 0014](adr/0014-security-hardening.md).
+- **14 Testing** — Playwright journey across all three apps (`pnpm e2e`,
+  CI job `e2e`), frontend unit tests, and `alembic check` fixed.
+- **15/16** — launch runbook in `infrastructure/deployment/README.md`.
+
+Per-feature status and what's left: [project-status.md](project-status.md).
 
 ## MVP scope (Phase 16)
 

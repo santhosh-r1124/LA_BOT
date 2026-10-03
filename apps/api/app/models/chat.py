@@ -6,7 +6,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -77,6 +77,13 @@ class ChatMessage(Base):
     # LOW/MEDIUM/HIGH/CRITICAL (Phase 5) — indexed for the Phase 12 admin
     # "high-risk query review" queue (docs/roadmap.md).
     risk_level: Mapped[str | None] = mapped_column(String(10))
+    # Admin high-risk review (Phase 12): set when a LEGAL_ADMIN/ADMIN has
+    # looked at a HIGH/CRITICAL message, so the review queue can empty.
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    review_note: Mapped[str | None] = mapped_column(Text)
 
     # Set on the assistant's message only (Phase 4) — the legal_chunks that
     # grounded the answer, as [{document_id, document_title, section, article,

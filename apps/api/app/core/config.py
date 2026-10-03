@@ -11,8 +11,10 @@ import json
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_DEV_SECRETS = frozenset({"change-me-dev-only", "changeme", "secret", ""})
 
 
 class Environment(enum.StrEnum):
@@ -124,6 +126,9 @@ class Settings(BaseSettings):
     # Per-client-IP requests per minute on the AI endpoints (chat, document
     # drafting). Protects free-tier provider quotas. 0 disables the limiter.
     ai_rate_limit_per_minute: int = 20
+    # Per-IP attempts per minute on credential endpoints (login, register,
+    # password reset, ...) — brute-force/credential-stuffing brake. 0 disables.
+    auth_rate_limit_per_minute: int = 10
     # How long to cache query embeddings in Redis (repeat questions skip the
     # embedding API call). 0 disables the cache.
     embedding_cache_ttl_seconds: int = 24 * 60 * 60
@@ -141,12 +146,75 @@ class Settings(BaseSettings):
     ingestion_max_source_bytes: int = 25 * 1024 * 1024
     ingestion_chunk_max_chars: int = 1500
     ingestion_chunk_overlap_chars: int = 200
+    # SSRF defence (app/core/net_safety.py). Empty = any *public* host;
+    # set e.g. "indiacode.nic.in,legislative.gov.in,meity.gov.in" in
+    # production to fetch only from known government hosts.
+    ingestion_allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    # ---- Dynamic legal-source discovery (upgrade: dynamic sourcing) --------
+    # Which discovery providers `kb:discover` runs, in order. "curated" is the
+    # hand-verified fallback (app/services/ingestion/official_sources.py);
+    # "india_code_oai" and "hf_dataset" are live crawlers — see
+    # app/services/ingestion/discovery.py and docs/adr/0011.
+    legal_source_discovery_providers: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["curated"]
+    )
+    # India Code is a DSpace repository (its /handle/ and /bitstream/ URL
+    # pattern is DSpace's signature) — DSpace exposes a standard OAI-PMH feed.
+    # The exact path can vary by DSpace version/deployment; the provider tries
+    # each of these in order and records which worked.
+    india_code_base_url: str = "https://www.indiacode.nic.in"
+    india_code_oai_paths: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["/oai/request", "/server/oai/request"]
+    )
+    india_code_oai_set: str | None = None
+    india_code_oai_page_limit: int = 20  # resumption-token pages per run, not documents
+    # Pre-scraped open corpus of ~34.7k central+state Act PDFs (see
+    # docs/adr/0011) via HF's public, keyless datasets-server API.
+    hf_dataset_id: str = "RUDXLABS/india-central-state-acts"
+    hf_dataset_config: str = "default"
+    hf_dataset_split: str = "train"
+    hf_dataset_page_size: int = 100
+    hf_dataset_max_rows: int = 2000
+
+    # ---- Payments (Phase 10) -------------------------------------------
+    # Razorpay (test or live mode — same API, different keys). Unset by
+    # default, same "build now, key later" pattern as GEMINI_API_KEY: order
+    # creation 503s with payments_not_configured until these are set. See
+    # docs/adr/0012-payments-provider.md.
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    # Separate secret configured in the Razorpay dashboard for webhooks —
+    # deliberately not the same as the API key secret above.
+    razorpay_webhook_secret: str | None = None
+    razorpay_api_base_url: str = "https://api.razorpay.com/v1"
+
+    # ---- Email delivery (Phase 11) --------------------------------------
+    # "console" logs emails (dev default, no account needed); "smtp" sends via
+    # any SMTP relay — Brevo, Resend, Amazon SES, Mailgun and Gmail all
+    # expose one, several with a free tier. See docs/adr/0013.
+    email_backend: Literal["console", "smtp"] = "console"
+    email_from: str = "Legal Advisor <no-reply@localhost>"
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    # STARTTLS on a plain connection (port 587) vs. implicit TLS (port 465).
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    smtp_timeout_seconds: float = 15.0
 
     # ---- Frontend (Phase 1+) ------------------------------------------
     # Base URL used to build links inside emails (verify-email, reset-password).
     frontend_base_url: str = "http://localhost:3000"
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator(
+        "cors_origins",
+        "legal_source_discovery_providers",
+        "india_code_oai_paths",
+        "ingestion_allowed_hosts",
+        mode="before",
+    )
     @classmethod
     def _split_cors_origins(cls, value: object) -> object:
         """Accept a comma-separated string or a JSON array as well as a list."""
@@ -158,6 +226,21 @@ class Settings(BaseSettings):
                 return json.loads(stripped)
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
+
+    @model_validator(mode="after")
+    def _refuse_insecure_production(self) -> Settings:
+        """Fail fast at startup rather than run production with a guessable
+        token-signing key or a wildcard CORS policy (Phase 13)."""
+        if not self.app_env.is_production:
+            return self
+        problems = []
+        if self.jwt_secret in _DEV_SECRETS or len(self.jwt_secret) < 32:
+            problems.append("JWT_SECRET must be a random value of at least 32 characters")
+        if "*" in self.cors_origins:
+            problems.append("CORS_ORIGINS must list explicit origins, not '*'")
+        if problems:
+            raise ValueError("Refusing to start in production: " + "; ".join(problems) + ".")
+        return self
 
     @property
     def sqlalchemy_url_async(self) -> str:

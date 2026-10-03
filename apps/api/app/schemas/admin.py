@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.advocate import AdvocateProfileOut
 from app.schemas.user import UserOut
@@ -24,3 +27,74 @@ class PaginatedAdvocateProfiles(BaseModel):
 
 class UserActiveUpdateRequest(BaseModel):
     is_active: bool
+
+
+class AdminAdvocateOut(AdvocateProfileOut):
+    """An advocate profile plus the account details a reviewer needs — the
+    public/self-service ``AdvocateProfileOut`` deliberately omits these."""
+
+    email: str
+    display_name: str | None
+
+
+class PaginatedAdminAdvocates(BaseModel):
+    items: list[AdminAdvocateOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class RiskReviewItem(BaseModel):
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    content: str
+    legal_category: str | None
+    jurisdiction_scope: str | None
+    risk_level: str | None
+    is_anonymous: bool
+    assistant_reply: str | None
+    created_at: datetime
+    reviewed_at: datetime | None
+    review_note: str | None
+
+
+class PaginatedRiskReview(BaseModel):
+    items: list[RiskReviewItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class RiskReviewRequest(BaseModel):
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class AdminOverview(BaseModel):
+    users_by_role: dict[str, int]
+    advocates_awaiting_verification: int
+    consultations_by_status: dict[str, int]
+    payments_by_status: dict[str, int]
+    legal_documents_by_status: dict[str, int]
+    catalog_by_status: dict[str, int]
+    risk_review_pending: int
+
+
+class AuditEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    actor_id: uuid.UUID | None
+    actor_email: str | None
+    action: str
+    target_type: str
+    target_id: str | None
+    details: dict[str, object] | None
+    ip_address: str | None
+    created_at: datetime
+
+
+class PaginatedAuditEvents(BaseModel):
+    items: list[AuditEventOut]
+    total: int
+    limit: int
+    offset: int
