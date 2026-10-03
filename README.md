@@ -81,6 +81,24 @@ Key decisions are recorded as ADRs in [`docs/adr/`](docs/adr/).
 
 ## Quick start
 
+**Fastest way (Windows, macOS, Linux):** with Docker Desktop running, from the
+repo root:
+
+```bash
+pnpm install
+pnpm dev:local
+```
+
+This starts Postgres, Redis and the API in Docker (the API applies database
+migrations itself), then runs both frontends on free ports — never 3000; the
+consumer web app starts at 3002 and moves up if that's busy — and prints the
+URLs to open. It also tells the API to accept those ports, so you don't need to
+edit `CORS_ORIGINS`. Pin the ports with `WEB_DEV_PORT` / `PORTAL_DEV_PORT`;
+pass `--skip-stack` if the API is already running. Ctrl+C stops the frontends;
+`pnpm stack:down` stops Docker.
+
+Step by step instead:
+
 ```bash
 # 1. Install JS dependencies
 pnpm install
@@ -189,6 +207,7 @@ and `apps/advocate-portal/.env.local` to match.
 | Command                       | Description                                  |
 | ----------------------------- | ------------------------------------------- |
 | `pnpm dev`                    | Run all JS apps in dev mode (Turborepo)     |
+| `pnpm dev:local`              | Docker stack + both frontends on free ports (not 3000) |
 | `pnpm build`                  | Build all JS apps + packages                |
 | `pnpm lint` / `pnpm typecheck`| Lint / type-check the JS workspace          |
 | `pnpm test`                   | Run JS tests                                |
