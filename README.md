@@ -91,13 +91,20 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env.local
 cp apps/advocate-portal/.env.example apps/advocate-portal/.env.local
 
-# 3. Start infrastructure + backing services (Postgres, Redis, API, web, portal)
+# 3. Start the backing services in Docker: Postgres, Redis and the API.
+#    The two frontends are NOT started by this command (step 5).
 pnpm stack:up
 
 # 4. Run database migrations
 pnpm db:migrate
 
-# 5. Verify
+# 5. Start the frontends, each in its own terminal
+pnpm --filter @legal-platform/web dev               # consumer web on :3000
+pnpm --filter @legal-platform/advocate-portal dev   # advocate portal on :3001
+#    (or run them in Docker instead:
+#     docker compose -f infrastructure/docker/docker-compose.yml --profile web up -d)
+
+# 6. Verify
 curl http://localhost:8000/health           # API liveness
 curl http://localhost:8000/health/ready      # API readiness (checks DB + Redis)
 open http://localhost:3000                    # consumer web — /chat, /register, /login, /profile
@@ -153,6 +160,30 @@ pnpm --filter @legal-platform/advocate-portal dev
 Remember to point `DATABASE_URL` / `REDIS_URL` at `localhost` when the API runs
 on the host — see the comments in `.env.example`.
 
+### Using different ports
+
+If port 3000 (or 3001) is already taken on your machine, start the frontend on
+another port — for example 5000:
+
+```bash
+pnpm --filter @legal-platform/web exec next dev --turbopack --port 5000
+```
+
+(`pnpm --filter @legal-platform/web dev -- -p 5000` does **not** work — the
+`dev` script already fixes the port.) The API only accepts browser requests
+from the origins it's told about, so also set these in the root `.env` (read by
+Docker) and in `apps/api/.env`, then restart the API (`pnpm stack:down && pnpm stack:up`):
+
+```bash
+CORS_ORIGINS=http://localhost:5000,http://localhost:3001
+FRONTEND_BASE_URL=http://localhost:5000   # links in verification/reset emails
+```
+
+When the frontends run in Docker (`--profile web`), set `WEB_PORT=5000` /
+`ADVOCATE_PORTAL_PORT=...` in the root `.env` instead. `API_PORT` moves the API;
+if you change it, update `NEXT_PUBLIC_API_BASE_URL` in `apps/web/.env.local`
+and `apps/advocate-portal/.env.local` to match.
+
 ## Common tasks
 
 | Command                       | Description                                  |
@@ -161,7 +192,7 @@ on the host — see the comments in `.env.example`.
 | `pnpm build`                  | Build all JS apps + packages                |
 | `pnpm lint` / `pnpm typecheck`| Lint / type-check the JS workspace          |
 | `pnpm test`                   | Run JS tests                                |
-| `pnpm stack:up` / `stack:down`| Start / stop the Docker stack               |
+| `pnpm stack:up` / `stack:down`| Start / stop Postgres, Redis and the API in Docker (not the frontends) |
 | `pnpm db:migrate`             | Apply Alembic migrations                    |
 | `pnpm db:revision -- "msg"`   | Autogenerate a new migration                |
 | `pnpm kb:seed`                | Index the curated official Indian sources   |
