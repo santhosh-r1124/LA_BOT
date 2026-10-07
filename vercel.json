@@ -1,29 +1,78 @@
 {
-  "buildCommand": "pnpm build && pnpm run db:migrate",
-  "devCommand": "pnpm dev",
-  "installCommand": "pnpm install",
-  "outputDirectory": "apps/web/.next",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "apps/web",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "api",
+          "format": "url",
+          "env": "NEXT_PUBLIC_API_BASE_URL"
+        }
+      ]
+    },
+    "advocate-portal": {
+      "root": "apps/advocate-portal",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "api",
+          "format": "url",
+          "env": "NEXT_PUBLIC_API_BASE_URL"
+        }
+      ]
+    },
+    "api": {
+      "root": "apps/api",
+      "framework": "fastapi"
+    },
+    "document-processing": {
+      "root": "services/document-processing",
+      "runtime": "python"
+    },
+    "legal-classifier": {
+      "root": "services/legal-classifier",
+      "runtime": "python"
+    },
+    "notifications": {
+      "root": "services/notifications",
+      "runtime": "python"
+    },
+    "rag": {
+      "root": "services/rag",
+      "runtime": "python"
+    },
+    "risk-engine": {
+      "root": "services/risk-engine",
+      "runtime": "python"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ],
   "env": {
     "LLM_PROVIDER": {
-      "description": "LLM Provider (gemini, groq, ollama, or anthropic)",
       "value": "gemini"
     },
-    "GEMINI_API_KEY": {
-      "description": "Google Gemini API Key (get free at ai.google.dev)",
-      "value": ""
-    },
     "APP_ENV": {
-      "description": "Environment (development, staging, production)",
       "value": "production"
     },
     "LOG_LEVEL": {
-      "description": "Log level (DEBUG, INFO, WARNING, ERROR)",
       "value": "INFO"
-    }
-  },
-  "git": {
-    "deploymentEnabled": {
-      "main": false
     }
   }
 }
