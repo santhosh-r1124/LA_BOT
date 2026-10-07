@@ -63,16 +63,5 @@
         "service": "web"
       }
     }
-  ],
-  "env": {
-    "LLM_PROVIDER": {
-      "value": "gemini"
-    },
-    "APP_ENV": {
-      "value": "production"
-    },
-    "LOG_LEVEL": {
-      "value": "INFO"
-    }
-  }
+  ]
 }
