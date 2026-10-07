@@ -3,7 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "description": "Indian Legal Advisor Bot & Advocate Connect \u2014 monorepo",
-  "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=22.11.0",
     "pnpm": ">=10"
