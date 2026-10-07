@@ -4,13 +4,16 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "pnpm run api:dev",
+    "startCommand": "pnpm install && pnpm db:migrate && pnpm dev",
     "restartPolicyCondition": "on-failure",
     "restartPolicyMaxRetries": 5
   },
   "plugins": [
     {
       "source": "https://github.com/railwayapp/plugins/releases/download/v1/postgres.zip"
+    },
+    {
+      "source": "https://github.com/railwayapp/plugins/releases/download/v1/redis.zip"
     }
   ]
 }
