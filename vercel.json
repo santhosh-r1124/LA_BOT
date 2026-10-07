@@ -1,0 +1,29 @@
+{
+  "buildCommand": "pnpm build && pnpm run db:migrate",
+  "devCommand": "pnpm dev",
+  "installCommand": "pnpm install",
+  "outputDirectory": "apps/web/.next",
+  "env": {
+    "LLM_PROVIDER": {
+      "description": "LLM Provider (gemini, groq, ollama, or anthropic)",
+      "value": "gemini"
+    },
+    "GEMINI_API_KEY": {
+      "description": "Google Gemini API Key (get free at ai.google.dev)",
+      "value": ""
+    },
+    "APP_ENV": {
+      "description": "Environment (development, staging, production)",
+      "value": "production"
+    },
+    "LOG_LEVEL": {
+      "description": "Log level (DEBUG, INFO, WARNING, ERROR)",
+      "value": "INFO"
+    }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  }
+}
