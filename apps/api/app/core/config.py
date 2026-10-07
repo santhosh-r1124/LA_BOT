@@ -159,6 +159,15 @@ class Settings(BaseSettings):
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
 
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def _force_asyncpg_driver(cls, value: str) -> str:
+        """Hosted Postgres (Railway, Render, Heroku) hands out driverless URLs."""
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+asyncpg://" + value[len(prefix) :]
+        return value
+
     @property
     def sqlalchemy_url_async(self) -> str:
         return self.database_url
