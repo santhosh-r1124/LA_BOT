@@ -1,30 +1,53 @@
 # LA_BOT Deployment Guide - FREE Hosting
 
-## 🚀 Quick Deploy (5 minutes)
+## 🚀 Quick Deploy (Choose Your Platform)
 
-### Option 1: Vercel (Recommended - Fastest)
+### 🌐 Option 1: Netlify + Render (Recommended - Most Popular)
 ```bash
-# 1. Push to GitHub
-git push origin claude/cool-wright-95j17z
+# 1. Deploy frontend to Netlify (10 min)
+#    https://NETLIFY_QUICK_START.md - follow the 5-step guide
+# 2. Deploy backend to Render (5 min)
+#    API on Render Free Tier → Netlify handles the frontends
+# 3. Everything is connected and working!
+```
+👉 **[Follow the Netlify Quick Start Guide](./NETLIFY_QUICK_START.md)**
 
-# 2. Go to https://vercel.com
-# 3. Import repository
-# 4. Set environment variables (see below)
-# 5. Deploy!
+### Option 2: Vercel (Full-Stack - Python Backend Not Supported)
+```bash
+# ⚠️ Note: Vercel can't run Python FastAPI backend directly
+# Consider: Vercel frontends + Render API (same as Netlify option)
+# OR: Railway for everything (includes Python support)
 ```
 
-### Option 2: Railway (Also Free)
+### Option 3: Railway (All-in-One - Recommended for Beginners)
 ```bash
 # Go to https://railway.app
-# Connect GitHub → Deploy
+# Connect GitHub → Auto-deploys web, api, db, redis
+# See: railway.json for configuration
 ```
 
-### Option 3: Render (Free Tier)
+### Option 4: Render (Recommended for FastAPI Backend)
 ```bash
 # https://render.com
 # Connect GitHub repository
-# Deploy web service
+# Deploy API service + database
 ```
+
+## 📚 Deployment Guides
+
+| Platform | Frontend | Backend | Database | Time | Cost |
+|----------|----------|---------|----------|------|------|
+| **Netlify + Render** | Netlify | Render | Render | 15 min | $0 |
+| **Railway** | Railway | Railway | Railway | 5 min | $0 |
+| **Vercel + Render** | Vercel | Render | Render | 15 min | $0 |
+| **Render Only** | Render | Render | Render | 10 min | $0 |
+
+👉 **[NEW: Netlify Quick Start (10 min)](./NETLIFY_QUICK_START.md)**  
+👉 **[Full Netlify Guide](./NETLIFY_DEPLOYMENT.md)**  
+👉 **[Railway Config](./railway.json)**  
+👉 **[Vercel Config](./vercel.json)**  
+
+---
 
 ## 🔑 Required Environment Variables
 

@@ -1,0 +1,40 @@
+{
+  "build": {
+    "command": "pnpm build",
+    "base": ".",
+    "publish": "apps/web/.next",
+    "functions": "netlify/functions"
+  },
+  "dev": {
+    "command": "pnpm dev"
+  },
+  "env": {
+    "NEXT_PUBLIC_API_BASE_URL": {
+      "description": "Base URL for the API (hosted separately on Render/Railway)",
+      "required": true,
+      "example": "https://la-bot-api.render.com"
+    },
+    "NEXT_PUBLIC_APP_ENV": {
+      "description": "App environment",
+      "default": "production"
+    },
+    "GEMINI_API_KEY": {
+      "description": "Google AI Studio API key for LLM",
+      "required": false
+    },
+    "GROQ_API_KEY": {
+      "description": "GroqCloud API key (alternative to Gemini)",
+      "required": false
+    }
+  },
+  "redirects": [
+    {
+      "from": "/api/*",
+      "to": "/.netlify/functions/proxy",
+      "status": 200,
+      "conditions": {
+        "role": ["admin"]
+      }
+    }
+  ]
+}

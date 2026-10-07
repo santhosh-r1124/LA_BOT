@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
+    "build:web": "pnpm --filter @legal-platform/web build",
+    "build:advocates": "pnpm --filter @legal-platform/advocate-portal build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
