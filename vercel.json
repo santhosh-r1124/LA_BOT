@@ -28,26 +28,6 @@
     "api": {
       "root": "apps/api",
       "framework": "fastapi"
-    },
-    "document-processing": {
-      "root": "services/document-processing",
-      "runtime": "python"
-    },
-    "legal-classifier": {
-      "root": "services/legal-classifier",
-      "runtime": "python"
-    },
-    "notifications": {
-      "root": "services/notifications",
-      "runtime": "python"
-    },
-    "rag": {
-      "root": "services/rag",
-      "runtime": "python"
-    },
-    "risk-engine": {
-      "root": "services/risk-engine",
-      "runtime": "python"
     }
   },
   "rewrites": [
