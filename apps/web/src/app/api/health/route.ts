@@ -10,7 +10,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const started = Date.now();
   try {
-    const res = await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/health/ready`, {
+    // Server-side fetches need an absolute URL; with a same-origin public
+    // base the API is reached on its internal address instead.
+    const apiBase = env.NEXT_PUBLIC_API_BASE_URL || process.env.API_INTERNAL_URL;
+    const res = await fetch(`${apiBase}/health/ready`, {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),
     });

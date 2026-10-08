@@ -82,6 +82,28 @@ def _patch_llm(
     monkeypatch.setattr(llm_module, "generate_grounded_answer", fake_generate)
 
 
+@pytest.fixture
+def strict_sources(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sources-only mode: no general answers when retrieval finds nothing."""
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("ALLOW_GENERAL_ANSWERS", "false")
+    get_settings.cache_clear()
+
+
+def _patch_general(monkeypatch: pytest.MonkeyPatch, answer: str = "General info.") -> list[str]:
+    calls: list[str] = []
+
+    async def fake_general(
+        message: str, *, history: list[tuple[str, str]], settings: object
+    ) -> str:
+        calls.append(message)
+        return answer
+
+    monkeypatch.setattr(llm_module, "generate_general_answer", fake_general)
+    return calls
+
+
 async def _register(db_client: AsyncClient) -> dict[str, object]:
     resp = await db_client.post(
         "/api/v1/auth/register",
@@ -140,7 +162,7 @@ async def test_high_risk_appends_advocate_recommendation(
 
 
 async def test_high_risk_advocate_recommendation_also_applies_to_insufficient_evidence(
-    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, strict_sources: None
 ) -> None:
     _patch_llm(monkeypatch, classification=HIGH_RISK_CLASSIFICATION, retrieved=[])
     resp = await db_client.post(
@@ -165,7 +187,7 @@ async def test_low_risk_does_not_append_advocate_recommendation(
 
 
 async def test_insufficient_evidence_short_circuits_generation(
-    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, strict_sources: None
 ) -> None:
     generate_called = False
 
@@ -186,7 +208,7 @@ async def test_insufficient_evidence_short_circuits_generation(
 
 
 async def test_retrieval_unavailable_falls_back_to_insufficient_evidence(
-    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, strict_sources: None
 ) -> None:
     from app.core.errors import ServiceUnavailableError
 
@@ -202,6 +224,46 @@ async def test_retrieval_unavailable_falls_back_to_insufficient_evidence(
     resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
     assert resp.status_code == 200
     assert resp.json()["assistant_message"]["content"] == INSUFFICIENT_EVIDENCE_MESSAGE
+
+
+async def test_no_sources_gets_a_general_answer_by_default(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    grounded_called = False
+
+    async def fake_grounded(*_args: object, **_kwargs: object) -> str:
+        nonlocal grounded_called
+        grounded_called = True
+        return "should not be reached"
+
+    _patch_llm(monkeypatch, retrieved=[])
+    monkeypatch.setattr(llm_module, "generate_grounded_answer", fake_grounded)
+    calls = _patch_general(monkeypatch, answer="An affidavit is a sworn statement.")
+
+    resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["assistant_message"]["content"] == "An affidavit is a sworn statement."
+    assert body["assistant_message"]["sources"] == []  # the UI labels this "general information"
+    assert calls == ["What is an affidavit?"]
+    assert grounded_called is False
+
+
+async def test_retrieval_unavailable_still_gets_a_general_answer(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.errors import ServiceUnavailableError
+
+    async def raising_search(query: str, *, db: object, settings: object) -> list[RetrievedChunk]:
+        raise ServiceUnavailableError("quota", code="embeddings_rate_limited")
+
+    _patch_llm(monkeypatch)
+    monkeypatch.setattr(retrieval_module, "hybrid_search", raising_search)
+    _patch_general(monkeypatch, answer="General info.")
+
+    resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
+    assert resp.status_code == 200
+    assert resp.json()["assistant_message"]["content"] == "General info."
 
 
 async def test_out_of_scope_short_circuits_generation(
@@ -385,7 +447,7 @@ async def test_stream_appends_advocate_recommendation_for_high_risk(
 
 
 async def test_stream_insufficient_evidence_needs_no_generation(
-    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, strict_sources: None
 ) -> None:
     _patch_llm(monkeypatch, retrieved=[])
     _patch_stream(monkeypatch, deltas=["SHOULD NOT APPEAR"])
@@ -394,6 +456,28 @@ async def test_stream_insufficient_evidence_needs_no_generation(
     events = _parse_sse(resp.text)
     assert events[1] == ("delta", {"text": INSUFFICIENT_EVIDENCE_MESSAGE})
     assert events[-1][0] == "done"
+
+
+async def test_stream_no_sources_streams_a_general_answer(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_llm(monkeypatch, retrieved=[])
+    _patch_stream(monkeypatch, deltas=["SHOULD NOT APPEAR"])
+
+    async def fake_general_stream(message: str, **_kwargs: object):  # type: ignore[no-untyped-def]
+        yield "General "
+        yield "answer."
+
+    monkeypatch.setattr(llm_module, "stream_general_answer", fake_general_stream)
+
+    resp = await db_client.post("/api/v1/chat/messages/stream", json={"message": "q"})
+    events = _parse_sse(resp.text)
+    assert events[0][1]["sources"] == []
+    assert [e for e in events if e[0] == "delta"] == [
+        ("delta", {"text": "General "}),
+        ("delta", {"text": "answer."}),
+    ]
+    assert events[-1][1]["assistant_message"]["content"] == "General answer."  # type: ignore[index]
 
 
 async def test_stream_generation_failure_emits_error_and_persists_nothing(
@@ -430,10 +514,15 @@ async def test_status_reports_real_counts_and_no_secrets(db_client: AsyncClient)
         "provider": None,
         "model": None,
         "is_free_tier": None,
+        "last_call_ok": None,
+        "last_call_at": None,
+        "last_error_code": None,
+        "last_error_message": None,
     }
     assert body["embeddings"]["configured"] is False
     kb = body["knowledge_base"]
     assert kb["available"] is True
     assert kb["documents_indexed"] >= 0
     assert body["advocate_directory"]["available"] is True
+    assert body["features"] == {"open_login": False, "general_answers": True}
     assert "generated_at" in body

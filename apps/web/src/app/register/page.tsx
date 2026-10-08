@@ -5,11 +5,15 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { ApiRequestError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
+import { usePlatformStatus } from '@/lib/status-client';
 import { buttonClass, Field, inputClass } from '@/components/form';
 
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
+  const { state: statusState } = usePlatformStatus();
+  const openLogin =
+    statusState.kind === 'ready' && (statusState.status.features?.open_login ?? false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -48,7 +52,8 @@ export default function RegisterPage() {
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field label="Email">
           <input
-            type="email"
+            type={openLogin ? 'text' : 'email'}
+            inputMode="email"
             required
             autoComplete="email"
             value={email}
@@ -56,11 +61,14 @@ export default function RegisterPage() {
             className={inputClass}
           />
         </Field>
-        <Field label="Password" hint="At least 8 characters.">
+        <Field
+          label="Password"
+          hint={openLogin ? 'Demo mode: any password works.' : 'At least 8 characters.'}
+        >
           <input
             type="password"
-            required
-            minLength={8}
+            required={!openLogin}
+            minLength={openLogin ? undefined : 8}
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

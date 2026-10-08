@@ -150,11 +150,11 @@ async def _prepare_turn(
         fixed_answer = OUT_OF_SCOPE_MESSAGE
     else:
         retrieved = await _retrieve(payload.message, db=db, settings=settings)
-        if not retrieved:
+        # [] marks "no indexed source backs this reply" (general answer or
+        # insufficient evidence); the UI labels it accordingly.
+        sources = [_source_dict(chunk) for chunk in retrieved]
+        if not retrieved and not settings.allow_general_answers:
             fixed_answer = INSUFFICIENT_EVIDENCE_MESSAGE
-            sources = []
-        else:
-            sources = [_source_dict(chunk) for chunk in retrieved]
 
     return _PreparedTurn(
         conversation=conversation,
@@ -201,11 +201,25 @@ async def send_message(
     turn = await _prepare_turn(payload, user=user, db=db, settings=settings)
     if turn.fixed_answer is not None:
         answer_text = turn.fixed_answer
-    else:
+    elif turn.retrieved:
         answer_text = await llm_service.generate_grounded_answer(
             payload.message, history=turn.history, context=turn.retrieved, settings=settings
         )
+    else:
+        answer_text = await llm_service.generate_general_answer(
+            payload.message, history=turn.history, settings=settings
+        )
     return await _finalize_turn(turn, answer_text + turn.advocate_suffix, db=db)
+
+
+def _answer_stream(
+    turn: _PreparedTurn, message: str, *, settings: SettingsDep
+) -> AsyncIterator[str]:
+    if turn.retrieved:
+        return llm_service.stream_grounded_answer(
+            message, history=turn.history, context=turn.retrieved, settings=settings
+        )
+    return llm_service.stream_general_answer(message, history=turn.history, settings=settings)
 
 
 def _sse(event: str, data: object) -> str:
@@ -255,9 +269,7 @@ async def send_message_stream(
         else:
             parts: list[str] = []
             try:
-                async for delta in llm_service.stream_grounded_answer(
-                    payload.message, history=turn.history, context=turn.retrieved, settings=settings
-                ):
+                async for delta in _answer_stream(turn, payload.message, settings=settings):
                     parts.append(delta)
                     yield _sse("delta", {"text": delta})
             except ServiceUnavailableError as exc:

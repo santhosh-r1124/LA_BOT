@@ -7,7 +7,7 @@ const TOOLS = [
   {
     href: '/chat',
     title: 'Legal chat',
-    body: 'Ask about Indian law in plain language. Answers are drawn only from indexed official sources and cite them.',
+    body: "Ask about Indian law in plain language. Answers cite indexed official sources where they match, and are labelled general information where they don't.",
     cta: 'Ask a question',
   },
   {
@@ -27,7 +27,7 @@ const TOOLS = [
 const PIPELINE = [
   ['Classify', 'Legal area, whether it depends on state law, and how urgent it is.'],
   ['Retrieve', 'Hybrid keyword + semantic search over Acts from India Code and ministries.'],
-  ['Answer', 'The model may only use the retrieved passages, and must cite them.'],
+  ['Answer', 'Matched passages are cited; anything else is labelled general information.'],
   ['Escalate', 'Disputes, notices and criminal matters are routed to an advocate.'],
 ] as const;
 
@@ -41,8 +41,8 @@ export default function HomePage() {
             Understand Indian law, and know when you need an advocate.
           </h1>
           <p className="muted max-w-xl">
-            Grounded answers from official Indian legal sources, document drafting guidance, and a
-            route to verified advocates for matters that need professional help.
+            Plain-language answers about Indian law, document drafting guidance, and a route to
+            verified advocates for matters that need professional help.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link href="/chat" className="btn btn-primary">

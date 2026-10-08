@@ -1,6 +1,6 @@
 'use client';
 
-import { MANDATORY_DISCLAIMER } from '@legal-platform/shared';
+import { INDIAN_STATES, MANDATORY_DISCLAIMER } from '@legal-platform/shared';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { LegalText } from '@/components/legal-text';
@@ -8,6 +8,9 @@ import { Disclaimer, EmptyState, ErrorState, PageHeader } from '@/components/ui'
 import { ApiRequestError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { documentClient, type DocumentTypeInfoOut, type QuestionOut } from '@/lib/document-client';
+import { stateName } from '@/lib/format';
+
+const STATE_OPTIONS = [...INDIAN_STATES].sort((a, b) => stateName(a).localeCompare(stateName(b)));
 
 // Acronyms that should stay all-caps rather than being title-cased.
 const ACRONYMS = new Set(['NDA']);
@@ -204,16 +207,35 @@ export default function DocumentsPage() {
                       {q.help_text}
                     </span>
                   )}
-                  <textarea
-                    id={`q-${q.key}`}
-                    value={answers[q.key] ?? ''}
-                    onChange={(e) => setAnswers((prev) => ({ ...prev, [q.key]: e.target.value }))}
-                    rows={2}
-                    required={q.required}
-                    aria-invalid={invalid || undefined}
-                    aria-describedby={describedBy || undefined}
-                    className="input resize-y"
-                  />
+                  {q.key === 'state_code' ? (
+                    <select
+                      id={`q-${q.key}`}
+                      value={answers[q.key] ?? ''}
+                      onChange={(e) => setAnswers((prev) => ({ ...prev, [q.key]: e.target.value }))}
+                      required={q.required}
+                      aria-invalid={invalid || undefined}
+                      aria-describedby={describedBy || undefined}
+                      className="input"
+                    >
+                      <option value="">Select a state or union territory</option>
+                      {STATE_OPTIONS.map((code) => (
+                        <option key={code} value={code}>
+                          {stateName(code)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <textarea
+                      id={`q-${q.key}`}
+                      value={answers[q.key] ?? ''}
+                      onChange={(e) => setAnswers((prev) => ({ ...prev, [q.key]: e.target.value }))}
+                      rows={2}
+                      required={q.required}
+                      aria-invalid={invalid || undefined}
+                      aria-describedby={describedBy || undefined}
+                      className="input resize-y"
+                    />
+                  )}
                   {invalid && (
                     <span id={`e-${q.key}`} className="field-error">
                       This field is required.

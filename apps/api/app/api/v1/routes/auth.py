@@ -38,6 +38,9 @@ logger = get_logger("app.auth")
 
 router = APIRouter()
 
+# Never opened up by OPEN_LOGIN: these accounts always need their real password.
+_PASSWORD_REQUIRED_ROLES = frozenset({UserRole.ADVOCATE, UserRole.ADMIN, UserRole.LEGAL_ADMIN})
+
 
 @router.post(
     "/register",
@@ -46,9 +49,12 @@ router = APIRouter()
     summary="Register a consumer account",
 )
 async def register(payload: RegisterRequest, db: DbSession, settings: SettingsDep) -> TokenPair:
-    email = payload.email.lower()
+    email = payload.email
     existing = await db.scalar(select(User).where(User.email == email))
     if existing is not None:
+        if settings.open_login and existing.role not in _PASSWORD_REQUIRED_ROLES:
+            # Open login: "creating" an account that exists just signs you in.
+            return await issue_token_pair(user=existing, db=db, settings=settings)
         raise ConflictError("An account with this email already exists.", code="email_taken")
 
     user = User(
@@ -58,9 +64,14 @@ async def register(payload: RegisterRequest, db: DbSession, settings: SettingsDe
         display_name=payload.display_name,
         state_code=payload.state_code,
         preferred_language=payload.preferred_language,
+        email_verified=settings.open_login,
     )
     db.add(user)
     await db.flush()  # populate user.id before referencing it below
+
+    if settings.open_login:
+        logger.info("user_registered", user_id=str(user.id), role=user.role.value, open_login=True)
+        return await issue_token_pair(user=user, db=db, settings=settings)
 
     raw_token, token_hash = security.generate_one_time_token()
     db.add(
@@ -78,8 +89,21 @@ async def register(payload: RegisterRequest, db: DbSession, settings: SettingsDe
 
 @router.post("/login", response_model=TokenPair, summary="Log in")
 async def login(payload: LoginRequest, db: DbSession, settings: SettingsDep) -> TokenPair:
-    user = await db.scalar(select(User).where(User.email == payload.email.lower()))
-    if user is None or not security.verify_password(payload.password, user.hashed_password):
+    user = await db.scalar(select(User).where(User.email == payload.email))
+    if settings.open_login and user is None:
+        user = User(
+            email=payload.email,
+            hashed_password=security.hash_password(payload.password),
+            role=UserRole.CONSUMER,
+            email_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+        logger.info("open_login_account_created", user_id=str(user.id))
+    elif user is None or (
+        not (settings.open_login and user.role not in _PASSWORD_REQUIRED_ROLES)
+        and not security.verify_password(payload.password, user.hashed_password)
+    ):
         raise UnauthorizedError("Incorrect email or password.", code="invalid_credentials")
     if not user.is_active:
         raise UnauthorizedError("This account has been deactivated.", code="account_inactive")

@@ -1,6 +1,11 @@
 'use client';
 
-import { INDIAN_STATES, LEGAL_CATEGORIES, MANDATORY_DISCLAIMER } from '@legal-platform/shared';
+import {
+  INDIAN_STATES,
+  LANGUAGE_NAMES,
+  LEGAL_CATEGORIES,
+  MANDATORY_DISCLAIMER,
+} from '@legal-platform/shared';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Disclaimer, EmptyState, ErrorState, PageHeader } from '@/components/ui';
@@ -10,7 +15,8 @@ import {
   type AdvocateDirectoryEntry,
   type AdvocateSearchFilters,
 } from '@/lib/advocate-client';
-import { formatEnumLabel, formatInr } from '@/lib/format';
+import { useAuth } from '@/lib/auth-context';
+import { formatInr, formatPhone, languageName, practiceAreaLabel, stateName } from '@/lib/format';
 
 const PAGE_SIZE = 20;
 const TEXT_DEBOUNCE_MS = 350;
@@ -25,7 +31,12 @@ function useDebounced<T>(value: T, delay: number): T {
   return debounced;
 }
 
+const STATE_OPTIONS = [...INDIAN_STATES].sort((a, b) => stateName(a).localeCompare(stateName(b)));
+const LANGUAGE_OPTIONS = Object.entries(LANGUAGE_NAMES).sort(([, a], [, b]) => a.localeCompare(b));
+
 export default function AdvocatesPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'LEGAL_ADMIN';
   const [practiceArea, setPracticeArea] = useState('');
   const [stateCode, setStateCode] = useState('');
   const [city, setCity] = useState('');
@@ -37,20 +48,19 @@ export default function AdvocatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
 
-  // Text inputs are debounced so typing "Chennai" is one request, not seven.
+  // The city input is debounced so typing "Chennai" is one request, not seven.
   const debouncedCity = useDebounced(city.trim(), TEXT_DEBOUNCE_MS);
-  const debouncedLanguage = useDebounced(language.trim(), TEXT_DEBOUNCE_MS);
 
   useEffect(() => {
     setOffset(0);
-  }, [practiceArea, stateCode, debouncedCity, debouncedLanguage]);
+  }, [practiceArea, stateCode, debouncedCity, language]);
 
   useEffect(() => {
     const filters: AdvocateSearchFilters = {
       practice_area: practiceArea || undefined,
       state_code: stateCode || undefined,
       city: debouncedCity || undefined,
-      language: debouncedLanguage || undefined,
+      language: language || undefined,
       limit: PAGE_SIZE,
       offset,
     };
@@ -78,7 +88,7 @@ export default function AdvocatesPage() {
     return () => {
       cancelled = true;
     };
-  }, [practiceArea, stateCode, debouncedCity, debouncedLanguage, offset, nonce]);
+  }, [practiceArea, stateCode, debouncedCity, language, offset, nonce]);
 
   const hasFilters = Boolean(practiceArea || stateCode || city || language);
   const clearFilters = () => {
@@ -93,8 +103,15 @@ export default function AdvocatesPage() {
       <PageHeader
         eyebrow="Advocate directory"
         title="Find a verified advocate"
-        description="Only advocates whose enrolment has been verified by the platform are listed. Filter by practice area, location and language."
+        description="Only advocates verified by the platform are listed. Filter by practice area, location and language, then contact them directly."
       />
+      {isAdmin && (
+        <p className="-mt-2 mb-4 text-sm">
+          <Link href="/advocates/import" className="link font-medium">
+            Import advocates from a CSV file →
+          </Link>
+        </p>
+      )}
 
       <form
         role="search"
@@ -115,7 +132,7 @@ export default function AdvocatesPage() {
             <option value="">Any</option>
             {LEGAL_CATEGORIES.filter((c) => c !== 'OUT_OF_SCOPE').map((c) => (
               <option key={c} value={c}>
-                {formatEnumLabel(c)}
+                {practiceAreaLabel(c)}
               </option>
             ))}
           </select>
@@ -131,9 +148,9 @@ export default function AdvocatesPage() {
             className="input"
           >
             <option value="">Any</option>
-            {INDIAN_STATES.map((s) => (
+            {STATE_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {stateName(s)}
               </option>
             ))}
           </select>
@@ -152,15 +169,21 @@ export default function AdvocatesPage() {
         </div>
         <div className="flex flex-col gap-1">
           <label htmlFor="f-lang" className="hint">
-            Language code
+            Language
           </label>
-          <input
+          <select
             id="f-lang"
-            placeholder="e.g. ta, hi, en"
             value={language}
             onChange={(e) => setLanguage(e.target.value)}
             className="input"
-          />
+          >
+            <option value="">Any</option>
+            {LANGUAGE_OPTIONS.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="flex items-end">
           <button
@@ -209,15 +232,16 @@ export default function AdvocatesPage() {
                         {fee && <span className="muted text-sm">{fee}</span>}
                       </div>
                       <p className="muted text-sm">
-                        {a.city}, {a.state_code}
+                        {a.city}, {stateName(a.state_code)}
                         {a.experience_years != null && ` · ${a.experience_years} yrs`}
-                        {a.languages.length > 0 && ` · ${a.languages.join(', ')}`}
+                        {a.languages.length > 0 && ` · ${a.languages.map(languageName).join(', ')}`}
                       </p>
+                      {a.phone && <p className="text-sm">{formatPhone(a.phone)}</p>}
                       {a.practice_areas.length > 0 && (
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {a.practice_areas.slice(0, 4).map((p) => (
                             <span key={p} className="badge">
-                              {formatEnumLabel(p)}
+                              {practiceAreaLabel(p)}
                             </span>
                           ))}
                           {a.practice_areas.length > 4 && (
@@ -267,7 +291,7 @@ export default function AdvocatesPage() {
           >
             {hasFilters
               ? 'Try a broader practice area or remove the city filter.'
-              : 'Advocates appear here once they register on the advocate portal and their enrolment is verified.'}
+              : 'Advocates appear here once they are verified or imported by an administrator.'}
           </EmptyState>
         )}
       </div>

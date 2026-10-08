@@ -11,6 +11,11 @@ export interface PlatformStatus {
     provider: string | null;
     model: string | null;
     is_free_tier: boolean | null;
+    /** Outcome of the most recent real model call; null until the first one. */
+    last_call_ok: boolean | null;
+    last_call_at: string | null;
+    last_error_code: string | null;
+    last_error_message: string | null;
   };
   embeddings: { configured: boolean; model: string | null };
   knowledge_base: {
@@ -21,6 +26,8 @@ export interface PlatformStatus {
     last_indexed_at: string | null;
   };
   advocate_directory: { available: boolean; verified_advocates: number | null };
+  /** Server feature switches (absent on older API versions). */
+  features?: { open_login: boolean; general_answers: boolean };
 }
 
 export const statusClient = {

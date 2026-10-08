@@ -6,7 +6,14 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { Disclaimer, ErrorState, StatusBadge } from '@/components/ui';
 import { ApiRequestError } from '@/lib/api-client';
 import { advocateClient, type AdvocateDirectoryEntry } from '@/lib/advocate-client';
-import { formatEnumLabel, formatInr } from '@/lib/format';
+import {
+  formatInr,
+  formatPhone,
+  languageName,
+  phoneHref,
+  practiceAreaLabel,
+  stateName,
+} from '@/lib/format';
 
 export default function AdvocateProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -71,11 +78,29 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
             <div>
               <h1 className="display text-2xl">{advocate.display_name || 'Advocate'}</h1>
               <p className="muted mt-1 text-sm">
-                {advocate.city}, {advocate.state_code}
+                {advocate.city}, {stateName(advocate.state_code)}
               </p>
             </div>
             <StatusBadge tone="ok">Verified by platform</StatusBadge>
           </div>
+
+          {(advocate.phone || advocate.email) && (
+            <section className="surface-flat mt-6 flex flex-wrap items-center gap-3 p-4">
+              <h2 className="subtle w-full text-xs font-semibold uppercase tracking-wider">
+                Contact
+              </h2>
+              {advocate.phone && (
+                <a href={phoneHref(advocate.phone)} className="btn btn-primary btn-sm">
+                  Call {formatPhone(advocate.phone)}
+                </a>
+              )}
+              {advocate.email && (
+                <a href={`mailto:${advocate.email}`} className="btn btn-secondary btn-sm">
+                  Email {advocate.email}
+                </a>
+              )}
+            </section>
+          )}
 
           <dl className="mt-6 grid gap-4 sm:grid-cols-2">
             {advocate.experience_years != null && (
@@ -93,7 +118,7 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
             {advocate.languages.length > 0 && (
               <div className="surface-flat p-3">
                 <dt className="subtle text-xs">Languages</dt>
-                <dd className="mt-0.5">{advocate.languages.join(', ')}</dd>
+                <dd className="mt-0.5">{advocate.languages.map(languageName).join(', ')}</dd>
               </div>
             )}
             {advocate.practice_areas.length > 0 && (
@@ -102,7 +127,7 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
                 <dd className="mt-1.5 flex flex-wrap gap-1.5">
                   {advocate.practice_areas.map((a) => (
                     <span key={a} className="badge">
-                      {formatEnumLabel(a)}
+                      {practiceAreaLabel(a)}
                     </span>
                   ))}
                 </dd>
@@ -118,7 +143,8 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
           )}
 
           <p className="alert mt-6 text-sm">
-            Consultation booking isn&apos;t available yet — this is a directory listing only.
+            Online booking isn&apos;t available yet. Contact the advocate directly to arrange a
+            consultation.
           </p>
         </article>
       )}

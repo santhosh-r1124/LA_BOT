@@ -158,3 +158,22 @@ async def test_other_users_cannot_read_an_owned_document_request(
 
     resp = await db_client.get(f"/api/v1/documents/{document_id}", headers=other_headers)
     assert resp.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("answer", "stored"),
+    [("Tamil Nadu", "TN"), ("tn", "TN"), ("Orissa", "OR"), ("somewhere in India", None)],
+)
+async def test_free_text_state_answers_never_fail_the_request(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, answer: str, stored: str | None
+) -> None:
+    _patch_generation(monkeypatch)
+    resp = await db_client.post(
+        "/api/v1/documents",
+        json={
+            "document_type": "AFFIDAVIT",
+            "answers": {**VALID_AFFIDAVIT_ANSWERS, "state_code": answer},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["document"]["state_code"] == stored

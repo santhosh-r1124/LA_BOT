@@ -19,6 +19,7 @@ from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, OptionalUser, SettingsDep
 from app.core.errors import ForbiddenError, NotFoundError, ValidationAppError
+from app.core.india import normalize_state
 from app.core.legal_text import MANDATORY_DISCLAIMER
 from app.models.document_request import AssistantDocumentType, DocumentRequest
 from app.models.user import User
@@ -77,7 +78,9 @@ async def create_document_request(
         payload.document_type, answers=payload.answers, settings=settings
     )
 
-    state_code = (payload.answers.get("state_code") or "").strip().upper() or None
+    # The state question is answered in free text ("Tamil Nadu", "TN", ...);
+    # store the code when it's recognisable rather than failing the request.
+    state_code = normalize_state(payload.answers.get("state_code") or "")
     document = DocumentRequest(
         user_id=user.id if user else None,
         document_type=payload.document_type,

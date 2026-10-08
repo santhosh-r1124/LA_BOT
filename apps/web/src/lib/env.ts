@@ -5,7 +5,11 @@ import { z } from 'zod';
  * Access must be via static property reads so Next can inline them at build time.
  */
 const publicSchema = z.object({
-  NEXT_PUBLIC_API_BASE_URL: z.string().url().default('http://localhost:8000'),
+  // Empty string = same origin: the web server proxies /api/v1 and /health to
+  // the API (single-container deployment, see the repo-root Dockerfile).
+  NEXT_PUBLIC_API_BASE_URL: z
+    .union([z.literal(''), z.string().url()])
+    .default('http://localhost:8000'),
   NEXT_PUBLIC_APP_ENV: z
     .enum(['development', 'staging', 'production'])
     .default('development'),

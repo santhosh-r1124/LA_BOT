@@ -227,6 +227,9 @@ export default function ChatPage() {
   const llmMissing = status !== null && !status.llm.configured;
   const kbEmpty =
     status !== null && status.knowledge_base.available && !status.knowledge_base.documents_indexed;
+  // Replies with no backing source are general-knowledge answers unless the
+  // server runs in strict sources-only mode.
+  const generalAnswers = status?.features?.general_answers ?? true;
 
   const historyPanel = (
     <div className="flex flex-col gap-2">
@@ -294,8 +297,10 @@ export default function ChatPage() {
               {statusState.kind === 'error' && 'Knowledge base status unavailable.'}
               {status &&
                 (status.knowledge_base.documents_indexed
-                  ? `Answers are grounded in ${status.knowledge_base.documents_indexed} indexed official source${status.knowledge_base.documents_indexed === 1 ? '' : 's'}.`
-                  : 'Answers are grounded only in indexed official sources.')}
+                  ? `Answers cite ${status.knowledge_base.documents_indexed} indexed official source${status.knowledge_base.documents_indexed === 1 ? '' : 's'} where they match.`
+                  : generalAnswers
+                    ? 'General information about Indian law, in plain language.'
+                    : 'Answers are grounded only in indexed official sources.')}
             </p>
           </div>
           <div className="flex gap-2 lg:hidden">
@@ -331,10 +336,11 @@ export default function ChatPage() {
         {!llmMissing && kbEmpty && (
           <div className="alert alert-warn mb-4" role="status">
             <div>
-              <p className="font-semibold">No legal sources have been indexed yet.</p>
+              <p className="font-semibold">No official legal sources have been indexed yet.</p>
               <p className="muted mt-0.5 text-sm">
-                Rather than guess, the assistant will say it doesn&apos;t have enough verified
-                information until official sources are loaded.
+                {generalAnswers
+                  ? 'Answers are general information from the AI model, not quotes from official texts. Verify anything important on India Code or with an advocate.'
+                  : "Rather than guess, the assistant will say it doesn't have enough verified information until official sources are loaded."}
               </p>
             </div>
           </div>
@@ -376,6 +382,7 @@ export default function ChatPage() {
                       <AssistantMessage
                         id={m.id}
                         text={m.content}
+                        general={generalAnswers && Array.isArray(m.sources) && m.sources.length === 0}
                         sources={m.sources ?? null}
                         category={
                           prev?.role === 'user' && !prev.is_out_of_scope
@@ -393,6 +400,11 @@ export default function ChatPage() {
                   <AssistantMessage
                     id="streaming"
                     text={streaming.text}
+                    general={
+                      generalAnswers &&
+                      Array.isArray(streaming.sources) &&
+                      streaming.sources.length === 0
+                    }
                     sources={streaming.sources}
                     category={streaming.category}
                     jurisdiction={streaming.jurisdiction}
@@ -478,6 +490,7 @@ function UserBubble({ text }: { text: string }) {
 function AssistantMessage({
   id,
   text,
+  general,
   sources,
   category,
   jurisdiction,
@@ -485,6 +498,8 @@ function AssistantMessage({
 }: {
   id: string;
   text: string;
+  /** No indexed source backs this reply: it's general AI-generated information. */
+  general: boolean;
   sources: SourceOut[] | null;
   category: string | null;
   jurisdiction: string | null;
@@ -494,9 +509,10 @@ function AssistantMessage({
   const jurisdictionLabel = jurisdiction ? JURISDICTION_LABEL[jurisdiction] : undefined;
   return (
     <article className="surface-flat p-4 sm:p-5" aria-label="Assistant answer">
-      {(category || jurisdictionLabel) && (
+      {(category || jurisdictionLabel || general) && (
         <div className="mb-3 flex flex-wrap gap-1.5">
           {category && <StatusBadge tone="accent">{titleCase(category)}</StatusBadge>}
+          {general && <StatusBadge tone="neutral">General information</StatusBadge>}
           {jurisdictionLabel && (
             <StatusBadge tone={jurisdiction === 'CENTRAL' ? 'neutral' : 'warn'}>
               {jurisdictionLabel}
@@ -509,13 +525,29 @@ function AssistantMessage({
         <LegalText text={text} sourceIdPrefix={prefix} sourceCount={sources?.length ?? 0} />
       ) : (
         <div role="status" className="flex flex-col gap-2">
-          <span className="muted text-sm">Checking the legal sources…</span>
+          <span className="muted text-sm">Thinking about your question…</span>
           <div className="skeleton h-3.5 w-full" />
           <div className="skeleton h-3.5 w-5/6" />
         </div>
       )}
       {pending && text && (
         <span className="bg-accent ml-1 inline-block h-4 w-1.5 animate-pulse align-middle" />
+      )}
+
+      {general && text && !pending && (
+        <p className="subtle border-line mt-4 border-t pt-3 text-xs leading-relaxed">
+          Not drawn from the platform&apos;s indexed official sources. Check important details
+          against the official text on{' '}
+          <a
+            href="https://www.indiacode.nic.in/"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="link"
+          >
+            India Code
+          </a>{' '}
+          or with an advocate.
+        </p>
       )}
 
       {sources && sources.length > 0 && (

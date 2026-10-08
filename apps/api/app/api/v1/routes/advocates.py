@@ -1,8 +1,8 @@
 """Advocate registration, self-service profile (Phase 1), and public
 marketplace discovery (Phase 7).
 
-Consultation booking is Phase 8 — search/profile here is read-only, there is
-no "contact" or "book" action yet.
+Consultation booking is Phase 8 — search/profile here is read-only. Listings
+include the advocate's email and phone so consumers can get in touch directly.
 """
 
 from __future__ import annotations
@@ -57,6 +57,9 @@ def _directory_entry(profile: AdvocateProfile) -> AdvocateDirectoryEntry:
         bio=profile.bio,
         experience_years=profile.experience_years,
         availability=profile.availability,
+        # Placeholder addresses (rows imported without an email) aren't contact details.
+        email=None if profile.user.email.endswith(".invalid") else profile.user.email,
+        phone=profile.phone,
     )
 
 

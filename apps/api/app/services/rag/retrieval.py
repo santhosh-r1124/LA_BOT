@@ -89,6 +89,10 @@ async def _keyword_ranked_ids(query: str, *, db: AsyncSession, limit: int) -> li
 async def hybrid_search(
     query: str, *, db: AsyncSession, settings: Settings, top_k: int = 6
 ) -> list[RetrievedChunk]:
+    # An empty knowledge base can't match anything: skip the embedding call
+    # (it costs free-tier quota and latency on every chat message).
+    if await db.scalar(select(LegalChunk.id).limit(1)) is None:
+        return []
     query_vector = await embed_query(query, settings=settings)
     vector_ids = await _vector_ranked_ids(query_vector, db=db, limit=_CANDIDATE_POOL)
     keyword_ids = await _keyword_ranked_ids(query, db=db, limit=_CANDIDATE_POOL)

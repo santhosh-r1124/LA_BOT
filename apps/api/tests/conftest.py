@@ -40,6 +40,11 @@ os.environ.setdefault("LLM_PROVIDER", "auto")
 for _key in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "OLLAMA_BASE_URL"):
     os.environ.setdefault(_key, "")
 os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-use-0123456789")
+# Real credential checks unless a test opts into open login (see test_auth.py).
+os.environ.setdefault("OPEN_LOGIN", "false")
+os.environ.setdefault("ADVOCATES_CSV_PATH", "")
+for _key in ("ADMIN_EMAIL", "ADMIN_PASSWORD"):
+    os.environ.setdefault(_key, "")
 
 
 def unique_email(prefix: str = "test") -> str:

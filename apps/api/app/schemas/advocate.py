@@ -88,6 +88,8 @@ class AdvocateDirectoryEntry(BaseModel):
     bio: str | None
     experience_years: int | None
     availability: dict[str, object] | None
+    email: str | None = None
+    phone: str | None = None
 
 
 class PaginatedAdvocateDirectory(BaseModel):

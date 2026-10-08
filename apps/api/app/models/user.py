@@ -97,6 +97,9 @@ class AdvocateProfile(TimestampMixin, Base):
     verification_note: Mapped[str | None] = mapped_column(Text)
     # Simple weekly-slot availability, e.g. {"mon": ["10:00-13:00"], ...}. Refined in Phase 8.
     availability: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    phone: Mapped[str | None] = mapped_column(String(32))
+    # Identifier from a bulk-import source file (app/services/advocate_import.py).
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
 
     user: Mapped[User] = relationship(back_populates="advocate_profile")
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from app.core.config import Settings
 from app.core.errors import ServiceUnavailableError
+from app.core.india import STATE_NAMES, normalize_state
 from app.core.logging import get_logger
 from app.models.document_request import AssistantDocumentType
 from app.services.document_assistant.questions import Question, questions_for
@@ -53,6 +54,8 @@ def _format_answers(document_type: AssistantDocumentType, answers: dict[str, str
     lines = [f"Document type: {document_type.value}"]
     for q in questions:
         value = (answers.get(q.key) or "").strip()
+        if q.key == "state_code" and (code := normalize_state(value)):
+            value = f"{STATE_NAMES[code]} ({code})"
         if value:
             lines.append(f"{q.label}: {value}")
     return "\n".join(lines)

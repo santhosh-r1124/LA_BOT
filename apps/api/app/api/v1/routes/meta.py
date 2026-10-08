@@ -13,7 +13,7 @@ from app.api.deps import DbSession, SettingsDep
 from app.core.logging import get_logger
 from app.models.legal_document import IngestionStatus, LegalDocument
 from app.models.user import AdvocateProfile, VerificationStatus
-from app.services.llm_provider import describe_provider
+from app.services.llm_provider import describe_provider, provider_health
 
 router = APIRouter()
 logger = get_logger("app.meta")
@@ -39,6 +39,12 @@ class LLMStatus(BaseModel):
     provider: str | None
     model: str | None
     is_free_tier: bool | None
+    # Outcome of the most recent real model call since the server started
+    # (null until the first one). No probe calls are made for this.
+    last_call_ok: bool | None = None
+    last_call_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_message: str | None = None
 
 
 class EmbeddingStatus(BaseModel):
@@ -60,6 +66,13 @@ class DirectoryStatus(BaseModel):
     verified_advocates: int | None
 
 
+class FeatureFlags(BaseModel):
+    open_login: bool
+    """Any email/password signs in (demo mode) — the login page says so."""
+    general_answers: bool
+    """Unsourced chat replies are general-knowledge answers, not refusals."""
+
+
 class StatusResponse(BaseModel):
     """Every field is read from configuration or the database at request
     time — nothing here is a placeholder. ``configured`` means a key/URL is
@@ -71,11 +84,13 @@ class StatusResponse(BaseModel):
     embeddings: EmbeddingStatus
     knowledge_base: KnowledgeBaseStatus
     advocate_directory: DirectoryStatus
+    features: FeatureFlags
 
 
 @router.get("/status", response_model=StatusResponse, summary="Feature availability (no secrets)")
 async def read_status(settings: SettingsDep, db: DbSession) -> StatusResponse:
     info = describe_provider(settings)
+    health = provider_health() if info.configured else None
 
     kb = KnowledgeBaseStatus(
         available=False,
@@ -118,8 +133,13 @@ async def read_status(settings: SettingsDep, db: DbSession) -> StatusResponse:
         llm=LLMStatus(
             configured=info.configured,
             provider=info.provider,
-            model=info.model,
+            # The model that actually answered last (a fallback, if one was needed).
+            model=health.model if health and health.ok and health.model else info.model,
             is_free_tier=info.is_free_tier,
+            last_call_ok=health.ok if health else None,
+            last_call_at=health.at if health else None,
+            last_error_code=health.error_code if health else None,
+            last_error_message=health.error_message if health else None,
         ),
         embeddings=EmbeddingStatus(
             configured=bool(settings.gemini_api_key),
@@ -127,4 +147,7 @@ async def read_status(settings: SettingsDep, db: DbSession) -> StatusResponse:
         ),
         knowledge_base=kb,
         advocate_directory=directory,
+        features=FeatureFlags(
+            open_login=settings.open_login, general_answers=settings.allow_general_answers
+        ),
     )

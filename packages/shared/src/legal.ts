@@ -47,6 +47,69 @@ export const INDIAN_STATES = [
 ] as const;
 export type IndianStateCode = (typeof INDIAN_STATES)[number];
 
+/** Display names for {@link INDIAN_STATES}. Mirrored in apps/api advocate_import.STATE_NAMES. */
+export const INDIAN_STATE_NAMES: Record<IndianStateCode, string> = {
+  AN: 'Andaman and Nicobar Islands',
+  AP: 'Andhra Pradesh',
+  AR: 'Arunachal Pradesh',
+  AS: 'Assam',
+  BR: 'Bihar',
+  CH: 'Chandigarh',
+  CT: 'Chhattisgarh',
+  DN: 'Dadra and Nagar Haveli and Daman and Diu',
+  DL: 'Delhi',
+  GA: 'Goa',
+  GJ: 'Gujarat',
+  HR: 'Haryana',
+  HP: 'Himachal Pradesh',
+  JK: 'Jammu and Kashmir',
+  JH: 'Jharkhand',
+  KA: 'Karnataka',
+  KL: 'Kerala',
+  LA: 'Ladakh',
+  LD: 'Lakshadweep',
+  MP: 'Madhya Pradesh',
+  MH: 'Maharashtra',
+  MN: 'Manipur',
+  ML: 'Meghalaya',
+  MZ: 'Mizoram',
+  NL: 'Nagaland',
+  OR: 'Odisha',
+  PY: 'Puducherry',
+  PB: 'Punjab',
+  RJ: 'Rajasthan',
+  SK: 'Sikkim',
+  TN: 'Tamil Nadu',
+  TG: 'Telangana',
+  TR: 'Tripura',
+  UP: 'Uttar Pradesh',
+  UT: 'Uttarakhand',
+  WB: 'West Bengal',
+};
+
+/** Language codes used for advocate profiles. Mirrored in apps/api advocate_import.LANGUAGE_NAMES. */
+export const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  hi: 'Hindi',
+  bn: 'Bengali',
+  te: 'Telugu',
+  mr: 'Marathi',
+  ta: 'Tamil',
+  ur: 'Urdu',
+  gu: 'Gujarati',
+  kn: 'Kannada',
+  ml: 'Malayalam',
+  or: 'Odia',
+  pa: 'Punjabi',
+  as: 'Assamese',
+  ks: 'Kashmiri',
+  kok: 'Konkani',
+  mai: 'Maithili',
+  ne: 'Nepali',
+  sa: 'Sanskrit',
+  sd: 'Sindhi',
+};
+
 /** Document types the Legal Document Assistant supports (FRD §7). */
 export const DOCUMENT_TYPES = [
   'RENTAL_AGREEMENT',

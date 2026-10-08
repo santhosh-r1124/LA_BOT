@@ -1,15 +1,16 @@
-"""Grounded answer generation (Phase 4) — provider-agnostic since the free-LLM
-upgrade (see `app.services.llm_provider`).
+"""Answer generation (Phase 4) — provider-agnostic since the free-LLM upgrade
+(see `app.services.llm_provider`).
 
 Query classification (category/jurisdiction/risk/in-scope) lives in
-`app.services.legal_classifier` — a separate module since Phase 5, not this
-one. Generation is grounded: the caller (app/api/v1/routes/chat.py) runs
-`app.services.rag.retrieval.hybrid_search` first and passes the retrieved
-chunks in as `context`. The model is instructed to answer only from that
-context and to cite it — see `_GROUNDED_ANSWER_SYSTEM_PROMPT`. There is no
-ungrounded generation path: per the product's "grounded, not guessed" rule
-(docs/roadmap.md), if retrieval finds nothing, the caller returns
-`INSUFFICIENT_EVIDENCE_MESSAGE` without calling this module at all.
+`app.services.legal_classifier`. Two answer modes:
+
+* Grounded — the caller (app/api/v1/routes/chat.py) runs
+  `app.services.rag.retrieval.hybrid_search` first and passes the retrieved
+  chunks in as `context`; the model answers only from them and cites them.
+* General — when retrieval finds nothing and ``ALLOW_GENERAL_ANSWERS`` is on,
+  the model answers from general knowledge of Indian law. These replies carry
+  ``sources == []`` so the UI labels them as general information, not
+  verified-source answers.
 """
 
 from __future__ import annotations
@@ -63,6 +64,37 @@ def _format_context(context: list[RetrievedChunk]) -> str:
     return "\n\n".join(parts)
 
 
+_GENERAL_ANSWER_SYSTEM_PROMPT = (
+    "You are the Legal Advisor assistant: a general Indian legal-information "
+    "helper for consumers, IT professionals, startups and organisations.\n\n"
+    "No excerpt from the platform's verified source library matched this "
+    "question, so answer from your general knowledge of Indian law. The "
+    "product labels this reply as general information.\n\n"
+    "Rules:\n"
+    "- Be accurate and conservative. Explain the principles, the usual process "
+    "and the practical next steps. Name a specific Act or section only when you "
+    "are confident it is correct and current, and never invent one.\n"
+    "- Since 1 July 2024 the Bharatiya Nyaya Sanhita, 2023 (BNS), the Bharatiya "
+    "Nagarik Suraksha Sanhita, 2023 (BNSS) and the Bharatiya Sakshya Adhiniyam, "
+    "2023 (BSA) have replaced the Indian Penal Code, the Code of Criminal "
+    "Procedure and the Indian Evidence Act. Use the new laws; mention the old "
+    "provision too when that helps the reader.\n"
+    "- If the answer depends on state law, local rules, stamp duty, registration "
+    "procedure or court jurisdiction, say so and ask which Indian state or city "
+    "is involved instead of quoting one figure as universal.\n"
+    "- For anything consequential, suggest checking the official text on India "
+    "Code (indiacode.nic.in) or consulting a qualified advocate.\n"
+    "- Provide general legal information and document guidance only, never "
+    "individualised legal advice, and never claim to be a lawyer or to create "
+    "an advocate-client relationship.\n"
+    "- Keep answers concise and in plain language, with short paragraphs or "
+    "bullet points where useful. Do not use bracketed citation numbers such as "
+    "[1]; there are no numbered sources in this reply.\n"
+    "- Do not restate the platform's legal disclaimer yourself; it is shown "
+    "separately by the product."
+)
+
+
 EMPTY_ANSWER_FALLBACK = "I couldn't generate a response just now. Please try again in a moment."
 
 
@@ -108,6 +140,31 @@ async def stream_grounded_answer(
     async for delta in provider.stream(
         system=_GROUNDED_ANSWER_SYSTEM_PROMPT,
         messages=_build_messages(message, history=history, context=context),
+        max_tokens=settings.llm_max_tokens,
+    ):
+        yield delta
+
+
+async def generate_general_answer(
+    message: str, *, history: list[tuple[str, str]], settings: Settings
+) -> str:
+    """Ungrounded answer for when retrieval found nothing (see module doc)."""
+    provider = get_provider(settings)
+    text = await provider.complete(
+        system=_GENERAL_ANSWER_SYSTEM_PROMPT,
+        messages=[*history, ("user", message)],
+        max_tokens=settings.llm_max_tokens,
+    )
+    return text or EMPTY_ANSWER_FALLBACK
+
+
+async def stream_general_answer(
+    message: str, *, history: list[tuple[str, str]], settings: Settings
+) -> AsyncIterator[str]:
+    provider = get_provider(settings)
+    async for delta in provider.stream(
+        system=_GENERAL_ANSWER_SYSTEM_PROMPT,
+        messages=[*history, ("user", message)],
         max_tokens=settings.llm_max_tokens,
     ):
         yield delta

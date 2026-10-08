@@ -304,3 +304,191 @@ def test_parse_json_object_handles_non_objects() -> None:
     assert llm_provider._parse_json_object("[1, 2]") == {}
     assert llm_provider._parse_json_object('{"a": 1} trailing') == {"a": 1}
     assert llm_provider._parse_json_object("{broken") == {}
+
+
+# ---------------------------------------------------------------------------
+# Gemini model fallback + failure classification
+# ---------------------------------------------------------------------------
+
+
+def _google_error(code: int, status: str, message: str, reason: str | None = None) -> Exception:
+    from google.genai import errors
+
+    error: dict[str, Any] = {"code": code, "message": message, "status": status}
+    if reason:
+        error["details"] = [{"reason": reason}]
+    return errors.ClientError(code, {"error": error})
+
+
+_NOT_FOUND = _google_error(404, "NOT_FOUND", "models/x is not found for API version v1beta")
+_BAD_KEY = _google_error(
+    400, "INVALID_ARGUMENT", "API key not valid. Please pass a valid API key.", "API_KEY_INVALID"
+)
+_NO_THINKING = _google_error(
+    400, "INVALID_ARGUMENT", "Thinking level is not supported for this model."
+)
+_QUOTA = _google_error(429, "RESOURCE_EXHAUSTED", "You exceeded your current quota.")
+
+
+class _ScriptedGeminiModels:
+    """Fails per (model, thinking) as scripted, otherwise answers."""
+
+    def __init__(self, failures: dict[tuple[str, bool], Exception]) -> None:
+        self.failures = failures
+        self.calls: list[tuple[str, bool]] = []
+
+    def _check(self, kwargs: dict[str, Any]) -> None:
+        key = (kwargs["model"], kwargs["config"].thinking_config is not None)
+        self.calls.append(key)
+        if key in self.failures:
+            raise self.failures[key]
+
+    async def generate_content(self, **kwargs: Any) -> _FakeGeminiResponse:
+        self._check(kwargs)
+        return _FakeGeminiResponse(f"answer from {kwargs['model']}")
+
+    async def generate_content_stream(self, **kwargs: Any) -> Any:
+        self._check(kwargs)
+
+        async def gen() -> Any:
+            yield _FakeGeminiResponse(f"streamed from {kwargs['model']}")
+
+        return gen()
+
+
+def _scripted(models: _ScriptedGeminiModels, model: str = "gemini-3.5-flash") -> GeminiProvider:
+    provider = _gemini(models)  # type: ignore[arg-type]
+    provider.model = model
+    return provider
+
+
+@pytest.fixture(autouse=True)
+def _reset_gemini_memory() -> Any:
+    GeminiProvider._resolved.clear()
+    yield
+    GeminiProvider._resolved.clear()
+
+
+async def test_gemini_falls_back_when_model_is_retired() -> None:
+    models = _ScriptedGeminiModels(
+        {("gemini-3.5-flash", True): _NOT_FOUND, ("gemini-3.5-flash", False): _NOT_FOUND}
+    )
+    text = await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    assert text == "answer from gemini-flash-latest"
+    # A 404 skips the model entirely — no second (no-thinking) attempt on it.
+    assert models.calls == [("gemini-3.5-flash", True), ("gemini-flash-latest", True)]
+
+    # The working model is remembered for the next request.
+    models.calls.clear()
+    await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    assert models.calls == [("gemini-flash-latest", True)]
+
+
+async def test_gemini_retries_without_thinking_when_unsupported() -> None:
+    models = _ScriptedGeminiModels({("gemini-3.5-flash", True): _NO_THINKING})
+    text = await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    assert text == "answer from gemini-3.5-flash"
+    assert models.calls == [("gemini-3.5-flash", True), ("gemini-3.5-flash", False)]
+
+
+async def test_gemini_2x_models_never_get_thinking_level() -> None:
+    models = _ScriptedGeminiModels({})
+    await _scripted(models, model="gemini-2.5-flash").complete(
+        system="s", messages=[("user", "q")], max_tokens=10
+    )
+    assert models.calls == [("gemini-2.5-flash", False)]
+
+
+async def test_gemini_bad_key_fails_fast_with_specific_message() -> None:
+    models = _ScriptedGeminiModels({("gemini-3.5-flash", True): _BAD_KEY})
+    with pytest.raises(ServiceUnavailableError) as exc_info:
+        await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    assert exc_info.value.code == "llm_auth_failed"
+    assert "GEMINI_API_KEY" in exc_info.value.message
+    assert models.calls == [("gemini-3.5-flash", True)]  # no pointless fallback attempts
+
+
+async def test_gemini_quota_on_primary_uses_fallback_but_does_not_pin_it() -> None:
+    models = _ScriptedGeminiModels({("gemini-3.5-flash", True): _QUOTA})
+    text = await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    assert text == "answer from gemini-flash-latest"
+    assert GeminiProvider._resolved == {}
+
+
+async def test_gemini_all_models_unavailable_lists_what_was_tried() -> None:
+    models = _ScriptedGeminiModels(
+        {
+            (m, t): _NOT_FOUND
+            for m in (
+                "gemini-3.5-flash",
+                "gemini-flash-latest",
+                "gemini-2.5-flash",
+                "gemini-flash-lite-latest",
+            )
+            for t in (True, False)
+        }
+    )
+    with pytest.raises(ServiceUnavailableError) as exc_info:
+        await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    assert exc_info.value.code == "llm_model_unavailable"
+    assert "gemini-flash-latest" in exc_info.value.message
+
+
+async def test_gemini_stream_falls_back_before_first_chunk() -> None:
+    models = _ScriptedGeminiModels({("gemini-3.5-flash", True): _NOT_FOUND})
+    chunks = [
+        c
+        async for c in _scripted(models).stream(system="s", messages=[("user", "q")], max_tokens=5)
+    ]
+    assert chunks == ["streamed from gemini-flash-latest"]
+
+
+async def test_gemini_complete_json_falls_back_too() -> None:
+    models = _ScriptedGeminiModels({("gemini-3.5-flash", True): _NOT_FOUND})
+    data = await _scripted(models).complete_json(
+        system="s", message="m", schema={"type": "object"}, schema_name="x", max_tokens=10
+    )
+    assert data == {}  # "answer from ..." isn't JSON; the point is it didn't raise
+
+
+@pytest.mark.parametrize(
+    ("exc", "kind"),
+    [
+        (_BAD_KEY, "auth"),
+        (_NOT_FOUND, "model_unavailable"),
+        (_NO_THINKING, "thinking_unsupported"),
+        (_QUOTA, "rate_limited"),
+        (
+            _google_error(403, "PERMISSION_DENIED", "Generative Language API has not been used"),
+            "permission",
+        ),
+        (
+            _google_error(
+                400, "FAILED_PRECONDITION", "User location is not supported for the API use."
+            ),
+            "region",
+        ),
+        (httpx.ConnectError("boom"), "unreachable"),
+        (httpx.ReadTimeout("slow"), "timeout"),
+        (RuntimeError("simulated transport failure"), "error"),
+    ],
+)
+def test_classify_failure(exc: Exception, kind: str) -> None:
+    from app.services.llm_provider import classify_failure
+
+    assert classify_failure(exc) == kind
+
+
+async def test_provider_health_records_last_outcome() -> None:
+    from app.services.llm_provider import provider_health
+
+    models = _ScriptedGeminiModels({("gemini-3.5-flash", True): _BAD_KEY})
+    with pytest.raises(ServiceUnavailableError):
+        await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    health = provider_health()
+    assert health is not None and health.ok is False and health.error_code == "llm_auth_failed"
+
+    models.failures.clear()
+    await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
+    health = provider_health()
+    assert health is not None and health.ok is True and health.model == "gemini-3.5-flash"

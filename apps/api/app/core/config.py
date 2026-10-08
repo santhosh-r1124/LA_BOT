@@ -8,11 +8,15 @@ from __future__ import annotations
 
 import enum
 import json
+import secrets
+import warnings
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_DEFAULT_SECRET = "change-me-dev-only"
 
 
 class Environment(enum.StrEnum):
@@ -72,12 +76,17 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # ---- Security ----------------------------------------------------
-    api_secret_key: str = "change-me-dev-only"
-    jwt_secret: str = "change-me-dev-only"
+    api_secret_key: str = _DEFAULT_SECRET
+    jwt_secret: str = _DEFAULT_SECRET
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 30
     refresh_token_ttl_days: int = 14
     email_verification_ttl_hours: int = 24
+    # Demo/testing mode: any email (or name) and any password signs in. Unknown
+    # emails get a verified consumer account; existing consumer accounts accept
+    # any password. ADVOCATE/ADMIN/LEGAL_ADMIN accounts still need their real
+    # password. Set OPEN_LOGIN=false for normal credential checks.
+    open_login: bool = True
     password_reset_ttl_hours: int = 1
 
     # ---- CORS ------------------------------------------------------
@@ -101,6 +110,11 @@ class Settings(BaseSettings):
     llm_request_timeout_seconds: float = 60.0
     # How many prior messages (user + assistant) to include as context.
     chat_history_length: int = 10
+    # When retrieval finds no indexed official source for a question, answer
+    # from the model's general knowledge (labelled as such in the UI) instead
+    # of replying "insufficient verified information". False = strict
+    # sources-only mode.
+    allow_general_answers: bool = True
 
     # Anthropic (optional, paid). ``LLM_MODEL`` is kept under its original
     # name for backwards compatibility and only applies to this provider.
@@ -108,7 +122,7 @@ class Settings(BaseSettings):
     llm_model: str = "claude-sonnet-5"
 
     # Google Gemini (free tier). Key shared with embeddings below.
-    gemini_llm_model: str = "gemini-3.5-flash"
+    gemini_llm_model: str = "gemini-flash-latest"
 
     # GroqCloud (free tier, OpenAI-compatible).
     groq_api_key: str | None = None
@@ -141,6 +155,15 @@ class Settings(BaseSettings):
     ingestion_max_source_bytes: int = 25 * 1024 * 1024
     ingestion_chunk_max_chars: int = 1500
     ingestion_chunk_overlap_chars: int = 200
+
+    # ---- Startup data ---------------------------------------------------
+    # CSV of advocates imported (upserted) into the directory on every start;
+    # path relative to apps/api. Empty string disables it.
+    advocates_csv_path: str = "data/advocates.csv"
+    # When both are set, this account is created/kept as an ADMIN on startup
+    # (it can upload advocate CSVs at /advocates/import).
+    admin_email: str | None = None
+    admin_password: str | None = None
 
     # ---- Frontend (Phase 1+) ------------------------------------------
     # Base URL used to build links inside emails (verify-email, reset-password).
@@ -182,6 +205,20 @@ class Settings(BaseSettings):
             .replace("postgresql+asyncpg", "postgresql+psycopg")
             .replace("postgres://", "postgresql+psycopg://")
         )
+
+    @model_validator(mode="after")
+    def _no_public_jwt_secret_in_production(self) -> Settings:
+        """The default secret is in the repo, so anyone could mint tokens with
+        it (including ADMIN ones). In production, swap it for a random
+        per-process secret: sessions then reset on restart until JWT_SECRET is
+        set, which beats forgeable tokens."""
+        if self.app_env is Environment.PRODUCTION and self.jwt_secret == _DEFAULT_SECRET:
+            self.jwt_secret = secrets.token_urlsafe(48)
+            warnings.warn(
+                "JWT_SECRET is not set; using a random secret (sessions reset on restart).",
+                stacklevel=2,
+            )
+        return self
 
     @property
     def docs_enabled(self) -> bool:

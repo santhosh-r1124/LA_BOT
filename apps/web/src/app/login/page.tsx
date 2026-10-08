@@ -6,10 +6,14 @@ import { useState, type FormEvent } from 'react';
 import { buttonClass, Field, inputClass } from '@/components/form';
 import { ApiRequestError } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
+import { usePlatformStatus } from '@/lib/status-client';
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const { state: statusState } = usePlatformStatus();
+  const openLogin =
+    statusState.kind === 'ready' && (statusState.status.features?.open_login ?? false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -31,12 +35,21 @@ export default function LoginPage() {
 
   return (
     <main className="surface auth-card">
-      <h1 className="display text-2xl">Log in</h1>
+      <div>
+        <h1 className="display text-2xl">Log in</h1>
+        {openLogin && (
+          <p className="text-fg-muted mt-1 text-sm">
+            Demo mode: any email and any password signs you in. A new account is created on the
+            first login.
+          </p>
+        )}
+      </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <Field label="Email">
           <input
-            type="email"
+            type={openLogin ? 'text' : 'email'}
+            inputMode="email"
             required
             autoComplete="email"
             value={email}
@@ -47,7 +60,7 @@ export default function LoginPage() {
         <Field label="Password">
           <input
             type="password"
-            required
+            required={!openLogin}
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

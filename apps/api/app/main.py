@@ -5,6 +5,8 @@ Run locally:  uv run uvicorn app.main:app --reload --port 8000
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -19,6 +21,7 @@ from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine
 from app.middleware.request_context import RequestContextMiddleware
 from app.services.redis import close_redis
+from app.services.startup import run_startup_tasks
 
 logger = get_logger("app.main")
 
@@ -30,10 +33,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "api_starting",
         environment=settings.app_env.value,
         version=settings.version,
+        open_login=settings.open_login,
     )
+    startup = asyncio.create_task(run_startup_tasks(settings))
     try:
         yield
     finally:
+        if not startup.done():
+            startup.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await startup
         await dispose_engine()
         await close_redis()
         logger.info("api_stopped")

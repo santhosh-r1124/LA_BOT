@@ -131,7 +131,7 @@ export function SystemStatus() {
                   ? 'Could not read the knowledge base.'
                   : kb.documents_indexed
                     ? `${kb.documents_indexed} official source${kb.documents_indexed === 1 ? '' : 's'} · ${(kb.chunks_indexed ?? 0).toLocaleString('en-IN')} passages · updated ${formatRelativeTime(kb.last_indexed_at)}`
-                    : 'No sources indexed yet — answers will report insufficient evidence.'
+                    : 'No official sources indexed yet — chat gives general legal information.'
               }
               badge={
                 !kb.available ? (
@@ -146,15 +146,21 @@ export function SystemStatus() {
             <Row
               label="AI model"
               value={
-                llm.configured
-                  ? `${providerLabel(llm.provider)} · ${llm.model}${llm.is_free_tier ? ' · free tier' : ''}`
-                  : 'No model provider configured on the server.'
+                !llm.configured
+                  ? 'No model provider configured on the server.'
+                  : llm.last_call_ok === false
+                    ? `${providerLabel(llm.provider)} · last request failed: ${llm.last_error_message ?? 'unknown error'}`
+                    : `${providerLabel(llm.provider)} · ${llm.model}${llm.is_free_tier ? ' · free tier' : ''}`
               }
               badge={
-                llm.configured ? (
-                  <StatusBadge tone="ok">Configured</StatusBadge>
-                ) : (
+                !llm.configured ? (
                   <StatusBadge tone="danger">Not configured</StatusBadge>
+                ) : llm.last_call_ok === false ? (
+                  <StatusBadge tone="danger">Failing</StatusBadge>
+                ) : llm.last_call_ok ? (
+                  <StatusBadge tone="ok">Working</StatusBadge>
+                ) : (
+                  <StatusBadge tone="ok">Configured</StatusBadge>
                 )
               }
             />

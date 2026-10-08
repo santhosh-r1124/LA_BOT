@@ -1,4 +1,6 @@
-import { apiFetch } from './api-client';
+import { apiFetch, ApiRequestError } from './api-client';
+import { env } from './env';
+import { isApiError } from '@legal-platform/shared';
 
 export interface AdvocateDirectoryEntry {
   id: string;
@@ -12,6 +14,19 @@ export interface AdvocateDirectoryEntry {
   bio: string | null;
   experience_years: number | null;
   availability: Record<string, unknown> | null;
+  email: string | null;
+  phone: string | null;
+}
+
+/** Mirrors `AdvocateImportReport` (apps/api/app/schemas/admin.py). */
+export interface AdvocateImportReport {
+  total_rows: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  failed: number;
+  dry_run: boolean;
+  errors: Array<{ line: number; message: string }>;
 }
 
 export interface PaginatedAdvocateDirectory {
@@ -48,4 +63,27 @@ export const advocateClient = {
 
   get: (advocateId: string) =>
     apiFetch<AdvocateDirectoryEntry>(`/api/v1/advocates/${advocateId}`),
+
+  /** Admin-only CSV upload (multipart, so not via apiFetch's JSON body). */
+  async importCsv(file: File, token: string, dryRun: boolean): Promise<AdvocateImportReport> {
+    const form = new FormData();
+    form.append('file', file);
+    let response: Response;
+    try {
+      response = await fetch(
+        `${env.NEXT_PUBLIC_API_BASE_URL}/api/v1/admin/advocates/import?dry_run=${dryRun}`,
+        { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}` } },
+      );
+    } catch {
+      throw new ApiRequestError(0, 'network_error', 'Could not reach the API.');
+    }
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      if (isApiError(payload)) {
+        throw new ApiRequestError(response.status, payload.error.code, payload.error.message);
+      }
+      throw new ApiRequestError(response.status, 'http_error', `Upload failed (${response.status}).`);
+    }
+    return payload as AdvocateImportReport;
+  },
 };

@@ -29,13 +29,22 @@ TokenType = Literal["access", "refresh"]
 # ---------------------------------------------------------------------------
 
 
+# bcrypt only reads the first 72 bytes; bcrypt>=5 raises instead of silently
+# truncating, so truncate explicitly (same result older versions produced).
+_BCRYPT_MAX_BYTES = 72
+
+
+def _bcrypt_input(password: str) -> bytes:
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
+
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(password: str, hashed: str) -> bool:
     try:
-        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
+        return bcrypt.checkpw(_bcrypt_input(password), hashed.encode("utf-8"))
     except ValueError:
         # Malformed hash (shouldn't happen outside of corrupted data / tests).
         return False

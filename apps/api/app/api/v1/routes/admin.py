@@ -11,15 +11,22 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, require_roles
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationAppError
 from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
-from app.schemas.admin import PaginatedAdvocateProfiles, PaginatedUsers, UserActiveUpdateRequest
+from app.schemas.admin import (
+    AdvocateImportReport,
+    ImportRowError,
+    PaginatedAdvocateProfiles,
+    PaginatedUsers,
+    UserActiveUpdateRequest,
+)
 from app.schemas.advocate import AdvocateProfileOut, AdvocateRejectRequest, AdvocateVerifyRequest
 from app.schemas.user import UserOut
+from app.services import advocate_import
 
 router = APIRouter()
 
@@ -134,3 +141,47 @@ async def reject_advocate(
     await db.commit()
     await db.refresh(profile)
     return AdvocateProfileOut.model_validate(profile)
+
+
+_MAX_IMPORT_BYTES = 5 * 1024 * 1024
+
+
+@router.post(
+    "/advocates/import",
+    response_model=AdvocateImportReport,
+    summary="Import advocates from a CSV file (add or update, never delete)",
+)
+async def import_advocates(
+    file: UploadFile, _admin: AdminUser, db: DbSession, dry_run: bool = False
+) -> AdvocateImportReport:
+    raw = await file.read(_MAX_IMPORT_BYTES + 1)
+    if len(raw) > _MAX_IMPORT_BYTES:
+        raise ValidationAppError("The file is larger than 5 MB.", code="file_too_large")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            text = raw.decode("cp1252")  # Excel's "CSV" on Windows
+        except UnicodeDecodeError as exc:
+            raise ValidationAppError("Save the file as CSV (UTF-8).", code="bad_csv") from exc
+    # A savepoint lets a dry run undo exactly the import's writes.
+    savepoint = await db.begin_nested()
+    try:
+        report = await advocate_import.import_csv_text(db, text)
+    except advocate_import.CsvFormatError as exc:
+        await savepoint.rollback()
+        raise ValidationAppError(str(exc), code="bad_csv") from exc
+    if dry_run:
+        await savepoint.rollback()
+    else:
+        await savepoint.commit()
+        await db.commit()
+    return AdvocateImportReport(
+        total_rows=report.total_rows,
+        created=report.created,
+        updated=report.updated,
+        unchanged=report.unchanged,
+        failed=report.failed,
+        dry_run=dry_run,
+        errors=[ImportRowError(line=e.line, message=e.message) for e in report.errors[:200]],
+    )
