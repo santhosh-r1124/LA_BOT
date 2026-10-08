@@ -78,6 +78,7 @@ export type AuthErrorKind =
   | 'account_inactive'
   | 'email_taken'
   | 'invalid_token'
+  | 'session_expired'
   | 'validation'
   | 'rate_limited'
   | 'network'
@@ -168,6 +169,15 @@ export function mapAuthError(err: unknown, context: AuthContext): MappedAuthErro
       break;
   }
 
+  // A 401 that is not a failed log in: the access token has expired or been revoked.
+  if (err.status === 401) {
+    return {
+      kind: 'session_expired',
+      form: 'Your session has ended. Log in again, then repeat what you were doing.',
+      fields: {},
+    };
+  }
+
   if (err.status === 422 || err.code === 'validation_error') {
     const fields: FieldErrors = {};
     const loose: string[] = [];
@@ -203,6 +213,49 @@ export function mapAuthError(err: unknown, context: AuthContext): MappedAuthErro
   return { kind: 'other', form: GENERIC, fields: {} };
 }
 
+/** One sentence for a place with no field to attach to (a "send again" button). */
+export function problemMessage(mapped: MappedAuthError): string {
+  return mapped.form ?? Object.values(mapped.fields)[0] ?? GENERIC;
+}
+
+/** A short heading for the form-level alert that goes with a mapped error. */
+export function errorTitle(kind: AuthErrorKind, context: AuthContext): string {
+  switch (kind) {
+    case 'network':
+      return "Can't reach the server";
+    case 'server':
+      return 'The server had a problem';
+    case 'rate_limited':
+      return 'Too many attempts';
+    case 'account_inactive':
+      return 'This account is switched off';
+    case 'session_expired':
+      return 'Your session has ended';
+    case 'invalid_credentials':
+      return 'Those details did not match';
+    case 'invalid_token':
+      return context === 'verify' ? "This link can't be used" : "This reset link can't be used";
+    case 'validation':
+      return 'Check the form';
+    default:
+      break;
+  }
+  switch (context) {
+    case 'login':
+      return "Couldn't log you in";
+    case 'register':
+      return "Couldn't create your account";
+    case 'profile':
+      return "Couldn't save your changes";
+    case 'request':
+      return "Couldn't send the link";
+    case 'reset':
+      return "Couldn't save the new password";
+    default:
+      return 'Something went wrong';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Redirects
 // ---------------------------------------------------------------------------
@@ -222,8 +275,35 @@ export function safeNextPath(raw: string | null | undefined): string | null {
 }
 
 export function loginHref(next?: string): string {
+  return authHref('/login', next);
+}
+
+/** `/login`, `/register`... carrying a safe `?next=` along, so it survives a detour. */
+export function authHref(
+  path: '/login' | '/register' | '/reset-password',
+  next?: string | null,
+): string {
   const safe = safeNextPath(next);
-  return safe ? `/login?next=${encodeURIComponent(safe)}` : '/login';
+  return safe ? `${path}?next=${encodeURIComponent(safe)}` : path;
+}
+
+/** One value from a Next `searchParams` entry (`?a=1&a=2` arrives as an array). */
+export function firstParam(value: string | string[] | undefined): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === 'string' && first ? first : null;
+}
+
+/** Where a signed-in person lands when no `?next=` was given. */
+export const DEFAULT_AFTER_LOGIN = '/profile';
+
+/** Plain words for a destination, for "Taking you to ..." lines. */
+export function destinationLabel(path: string): string {
+  const name = path.split(/[?#]/)[0] ?? '';
+  if (name === '/profile') return 'your profile';
+  if (name === '/chat') return 'the chat';
+  if (name === '/documents' || name.startsWith('/documents/')) return 'documents';
+  if (name === '/advocates' || name.startsWith('/advocates/')) return 'the advocate directory';
+  return 'where you were going';
 }
 
 // ---------------------------------------------------------------------------

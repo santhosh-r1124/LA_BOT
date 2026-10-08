@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type FocusEvent,
   type InputHTMLAttributes,
   type ReactElement,
   type ReactNode,
@@ -42,6 +43,22 @@ export const secondaryButtonClass = 'btn btn-secondary';
 
 export type FieldErrors<K extends string = string> = Partial<Record<K, string>>;
 
+/**
+ * Builds a `FieldErrors` from validators that return a message or `null`, so a
+ * `validate` function can be written as one object literal:
+ * `compactErrors({ email: validateEmail(v.email, lenient), … })`.
+ */
+export function compactErrors<K extends string>(
+  errors: Record<K, string | null | undefined>,
+): FieldErrors<K> {
+  const out: FieldErrors<K> = {};
+  for (const key of Object.keys(errors) as K[]) {
+    const message = errors[key];
+    if (message) out[key] = message;
+  }
+  return out;
+}
+
 /** Props a control inside a `Field` should receive. */
 export interface FieldControlProps {
   id: string;
@@ -59,6 +76,8 @@ export interface FieldProps {
   optional?: boolean;
   /** Right-aligned content in the label row, such as "Forgot password?". */
   labelAction?: ReactNode;
+  /** A link or button shown after the error text, such as "Log in instead". */
+  errorAction?: ReactNode;
   className?: string;
   children: ReactNode | ((control: FieldControlProps) => ReactNode);
 }
@@ -69,6 +88,7 @@ export function Field({
   error,
   optional,
   labelAction,
+  errorAction,
   className,
   children,
 }: FieldProps) {
@@ -114,7 +134,10 @@ export function Field({
       {error && (
         <p id={errorId} className="field-error">
           <AlertIcon className="mt-px h-4 w-4 flex-none" />
-          <span>{error}</span>
+          <span>
+            {error}
+            {errorAction && <> {errorAction}</>}
+          </span>
         </p>
       )}
     </div>
@@ -161,12 +184,20 @@ export function PasswordField({
   error,
   optional,
   labelAction,
+  errorAction,
   inputRef,
   ...inputProps
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
   return (
-    <Field label={label} hint={hint} error={error} optional={optional} labelAction={labelAction}>
+    <Field
+      label={label}
+      hint={hint}
+      error={error}
+      optional={optional}
+      labelAction={labelAction}
+      errorAction={errorAction}
+    >
       {(control) => (
         <div className="relative">
           <input
@@ -200,18 +231,17 @@ export function LengthMeter({ value, min = 8 }: { value: string; min?: number })
   const ok = value.length >= min;
   return (
     <div className="flex items-center gap-3 text-xs" data-testid="length-meter">
-      <span
-        aria-hidden="true"
-        className="bg-line-strong h-1.5 flex-1 overflow-hidden rounded-pill"
-      >
+      <span aria-hidden="true" className="bg-line-strong rounded-pill h-1.5 flex-1 overflow-hidden">
         <span
-          className={`block h-full rounded-pill transition-[width] duration-200 ${
+          className={`rounded-pill block h-full transition-[width] duration-200 ${
             ok ? 'bg-ok' : 'bg-accent'
           }`}
           style={{ width: `${Math.round(progress * 100)}%` }}
         />
       </span>
-      <span className={`flex items-center gap-1 whitespace-nowrap ${ok ? 'text-ok' : 'text-fg-muted'}`}>
+      <span
+        className={`flex items-center gap-1 whitespace-nowrap ${ok ? 'text-ok' : 'text-fg-muted'}`}
+      >
         {ok && <CheckIcon className="h-3.5 w-3.5" />}
         {ok ? 'Long enough' : `${value.length} of ${min} characters`}
       </span>
@@ -262,17 +292,29 @@ export function SubmitButton({
   loadingLabel,
   children,
   className,
+  block = true,
+  large = true,
+  disabled,
 }: {
   loading: boolean;
   loadingLabel?: string;
   children: ReactNode;
   className?: string;
+  /** Full width (default). */
+  block?: boolean;
+  /** 48px tall (default); false gives the standard 40px button. */
+  large?: boolean;
+  /** Use for "nothing to save", never while loading (the button stays focusable). */
+  disabled?: boolean;
 }) {
   return (
     <button
       type="submit"
+      disabled={disabled}
       aria-busy={loading ? true : undefined}
-      className={['btn btn-primary btn-lg btn-block', className].filter(Boolean).join(' ')}
+      className={['btn btn-primary', large && 'btn-lg', block && 'btn-block', className]
+        .filter(Boolean)
+        .join(' ')}
     >
       {loading && loadingLabel ? loadingLabel : children}
     </button>
@@ -321,8 +363,8 @@ type Touched<K extends string> = Partial<Record<K, boolean>>;
 /**
  * Values plus inline validation for a form.
  *
- * - A client error shows once the field has been left (blur) or the form was
- *   submitted, then updates as the person types.
+ * - A client error shows once a field that has content (or was edited) has been
+ *   left (blur), or the form was submitted, then updates as the person types.
  * - A server error for a field shows until that field is edited.
  * - `bind(name)` gives a control its value, handlers and `aria-invalid`.
  */
@@ -334,6 +376,9 @@ export function useFormFields<K extends string>(
   const [touched, setTouched] = useState<Touched<K>>({});
   const [submitted, setSubmitted] = useState(false);
   const [server, setServer] = useState<FieldErrors<K>>({});
+  // Fields the person has typed in. Tabbing through an empty field is not an
+  // error yet; "required" messages wait for the submit.
+  const edited = useRef<Partial<Record<K, boolean>>>({});
 
   const client = validate(values);
 
@@ -341,6 +386,7 @@ export function useFormFields<K extends string>(
     server[name] ?? (touched[name] || submitted ? client[name] : undefined);
 
   const set = (name: K, value: string) => {
+    edited.current[name] = true;
     setValues((prev) => ({ ...prev, [name]: value }));
     setServer((prev) => {
       if (!(name in prev)) return prev;
@@ -354,7 +400,15 @@ export function useFormFields<K extends string>(
     name,
     value: values[name],
     onChange: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => set(name, e.target.value),
-    onBlur: () => setTouched((prev) => (prev[name] ? prev : { ...prev, [name]: true })),
+    onBlur: (e: FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
+      // Moving straight to a submit button: the submit validates everything. Showing
+      // an error now would push the button down before the click finishes, and the
+      // click would be lost.
+      const next = e.relatedTarget;
+      if (next instanceof HTMLButtonElement && next.type === 'submit') return;
+      if (!edited.current[name] && !e.currentTarget.value) return;
+      setTouched((prev) => (prev[name] ? prev : { ...prev, [name]: true }));
+    },
   });
 
   /** Marks the form as submitted and returns the client errors (empty = valid). */
@@ -367,6 +421,7 @@ export function useFormFields<K extends string>(
   const setServerErrors = (fields: FieldErrors) => setServer(fields as FieldErrors<K>);
 
   const reset = (next: Record<K, string>) => {
+    edited.current = {};
     setValues(next);
     setTouched({});
     setSubmitted(false);
@@ -374,4 +429,23 @@ export function useFormFields<K extends string>(
   };
 
   return { values, set, bind, errorFor, validateAll, setServerErrors, reset };
+}
+
+/**
+ * A ref for a heading (`tabIndex={-1}`): when `key` changes after the first
+ * render, focus moves to it. Use it when a form is replaced by a result ("Check
+ * your email", "Password updated") so keyboard and screen-reader users land on
+ * the new content instead of on a control that has disappeared.
+ */
+export function useFocusOnChange<T extends HTMLElement = HTMLHeadingElement>(key: unknown) {
+  const ref = useRef<T>(null);
+  // Compared with the previous key (not a "first run" flag) so React's double
+  // effect run in development does not steal focus on mount.
+  const previous = useRef(key);
+  useEffect(() => {
+    if (Object.is(previous.current, key)) return;
+    previous.current = key;
+    ref.current?.focus();
+  }, [key]);
+  return ref;
 }

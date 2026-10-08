@@ -261,19 +261,19 @@ function FailureNotice({
 
   const canRetry = failure.kind !== 'invalid';
   return (
-    <div className="alert alert-danger" data-testid="draft-failure">
+    <div className={`alert alert-danger ${styles.failureAlert}`} data-testid="draft-failure">
       <AlertIcon />
-      <div className="min-w-0 flex-1">
+      <div className={styles.failureBody}>
         <div role="alert">
           <p className="alert-title">{failure.title}</p>
           <p className="muted mt-0.5">{failure.message}</p>
         </div>
       </div>
       {canRetry && (
-        <div className="shrink-0 self-center">
+        <div className={styles.failureAction}>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary"
             disabled={left > 0 || busy}
             onClick={onRetry}
           >
@@ -343,6 +343,25 @@ export function Questionnaire({
   const requiredQuestions = info.questions.filter((q) => q.required);
   const anyAnswer = info.questions.some((q) => !isBlank(answers[q.key]));
 
+  // Keep anything the browser scrolls to (a newly focused field, the failure notice, a "jump to
+  // this question" link) clear of the sticky site header and the sticky submit bar below the
+  // form (WCAG 2.2 "Focus Not Obscured"). Chrome does not scroll a half-visible field, so a
+  // per-element scroll margin is not enough; scroll-padding on the page shrinks the region it
+  // treats as visible. Set only while this form is mounted, and put back on the way out.
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = {
+      top: root.style.scrollPaddingTop,
+      bottom: root.style.scrollPaddingBottom,
+    };
+    root.style.scrollPaddingTop = 'calc(var(--header-h) + 1rem)';
+    root.style.scrollPaddingBottom = '6.5rem';
+    return () => {
+      root.style.scrollPaddingTop = previous.top;
+      root.style.scrollPaddingBottom = previous.bottom;
+    };
+  }, []);
+
   useEffect(() => {
     if (failure) setFailedAnswers(answers);
     // Only a new failure takes a snapshot, not every keystroke afterwards.
@@ -397,7 +416,7 @@ export function Questionnaire({
     <>
       <header className={styles.intro}>
         <div className="flex max-w-2xl flex-col gap-2">
-          <Link href="/documents" className="btn btn-ghost btn-sm -ml-2 mb-1 w-fit">
+          <Link href="/documents" className="btn btn-ghost -ml-2 w-fit">
             <ArrowLeftGlyph />
             All document types
           </Link>
@@ -430,7 +449,7 @@ export function Questionnaire({
                       : 'How your draft is made'}
                 </span>
               </summary>
-              <div className="mt-3 flex flex-col gap-3">
+              <div className={`${styles.infoBody} flex flex-col gap-3`}>
                 <ModeNote mode={drafting.mode} loading={drafting.loading} />
                 <AnswersNote />
               </div>
@@ -516,7 +535,7 @@ export function Questionnaire({
             <div className={styles.footerRow}>
               <button
                 type="button"
-                className="btn btn-ghost btn-sm -ml-2"
+                className="btn btn-ghost -ml-2"
                 disabled={!anyAnswer || submitting}
                 onClick={() => {
                   onClear();

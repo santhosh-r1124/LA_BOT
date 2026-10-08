@@ -254,18 +254,24 @@
 /* Below the large breakpoint the same information folds into a disclosure above the form. */
 .infoDetails {
   margin-bottom: 1.25rem;
-  padding: 0.8rem 1rem;
+  padding: 0;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-item);
   background: var(--color-tint);
 }
 
 .infoDetails > summary {
-  min-height: 1.5rem;
+  /* The padding lives on the summary so the whole header row opens it (a 44px target). */
+  min-height: 2.75rem;
+  padding: 0.5rem 1rem;
   color: var(--color-fg-strong);
   font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.4;
+}
+
+.infoBody {
+  padding: 0.25rem 1rem 1rem;
 }
 
 .infoDetails > summary > svg {
@@ -322,9 +328,10 @@
 
 .reqItem {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.6rem;
   width: calc(100% + 0.7rem);
+  min-height: 2.5rem;
   margin: 0 -0.35rem;
   padding: 0.4rem 0.35rem;
   border: 0;
@@ -354,7 +361,6 @@
   flex: none;
   width: 1.1rem;
   height: 1.1rem;
-  margin-top: 0.05rem;
   border: 1.5px solid var(--color-control);
   border-radius: 50%;
   color: var(--color-accent-fg);
@@ -543,8 +549,32 @@
   line-height: 1.4;
 }
 
-.failureWrap {
-  scroll-margin-top: calc(var(--header-h) + 1rem);
+/* No scroll margin here: while the questionnaire is mounted it sets scroll-padding on the page
+   (see the effect in questionnaire.tsx) so nothing scrolls under the sticky header or bar. */
+
+/* The retry alert: text and button share a row when there is room, and stack when there is not
+   (a button squeezed beside the text wrapped the title onto three lines at phone width). */
+.failureAlert {
+  flex-wrap: wrap;
+}
+
+.failureBody {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.failureAction {
+  flex: none;
+  align-self: center;
+}
+
+@media (max-width: 559px) {
+  .failureAction {
+    flex-basis: 100%;
+    align-self: flex-start;
+    /* Line the button up with the text, past the icon and its gap. */
+    padding-left: calc(1.2rem + 0.75rem);
+  }
 }
 
 .summary {
@@ -556,13 +586,16 @@
 .summary ul {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  gap: 0 1.25rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .summaryLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.5rem;
   padding: 0;
   border: 0;
   background: none;
@@ -806,11 +839,17 @@
 }
 
 .toolsMore {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.25rem 0.5rem;
-  padding-top: 0.85rem;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--color-line);
+}
+
+/* Two quiet 40px actions side by side. Tighter side padding so both labels fit the 19rem panel. */
+.toolsMore > button {
+  justify-content: center;
+  padding-inline: 0.5rem;
 }
 
 .sheetHead {

@@ -386,11 +386,11 @@ export function ResultView({
               </p>
             )}
             <div className={styles.toolsMore}>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
+              <button type="button" className="btn btn-ghost" onClick={onEdit}>
                 <PencilGlyph />
                 Edit answers
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={onReset}>
+              <button type="button" className="btn btn-ghost" onClick={onReset}>
                 <RefreshIcon />
                 Start over
               </button>

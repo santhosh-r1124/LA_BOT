@@ -1,6 +1,6 @@
 'use client';
 
-import type { AuthUser } from '@legal-platform/auth';
+import type { AuthUser, TokenPair } from '@legal-platform/auth';
 import { isTokenExpired } from '@legal-platform/auth';
 import type { AdvocateProfile } from '@legal-platform/shared';
 import {
@@ -9,6 +9,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -23,11 +24,21 @@ import {
 const ACCESS_TOKEN_KEY = 'lp_advocate_access_token';
 const REFRESH_TOKEN_KEY = 'lp_advocate_refresh_token';
 
+/** Why a saved session could not be restored: the API did not answer. */
+export type SessionIssue = 'network' | null;
+
 interface AuthContextValue {
   user: AuthUser | null;
   profile: AdvocateProfile | null;
   accessToken: string | null;
   loading: boolean;
+  /**
+   * `'network'` when a saved session exists but the API could not be reached.
+   * The saved tokens are kept, so {@link AuthContextValue.retrySession} can
+   * pick up where the person left off once the API is back.
+   */
+  sessionIssue: SessionIssue;
+  retrySession: () => Promise<void>;
   registerAdvocate: (payload: AdvocateRegisterPayload) => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
@@ -67,6 +78,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionIssue, setSessionIssue] = useState<SessionIssue>(null);
+  const restoreStarted = useRef(false);
 
   const applyTokens = useCallback((access: string, refresh: string) => {
     setAccessToken(access);
@@ -79,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setAccessToken(null);
     setRefreshToken(null);
+    setSessionIssue(null);
     storeTokens(null, null);
   }, []);
 
@@ -91,57 +105,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(advocateProfile);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function restore(): Promise<void> {
-      const { access, refresh } = readStoredTokens();
-      if (!access || !refresh) {
-        setLoading(false);
-        return;
-      }
-      try {
-        let currentAccess = access;
-        if (isTokenExpired(currentAccess)) {
-          const pair = await authClient.refresh(refresh);
-          if (cancelled) return;
-          currentAccess = pair.access_token;
-          applyTokens(pair.access_token, pair.refresh_token);
-        } else {
-          setAccessToken(currentAccess);
-          setRefreshToken(refresh);
-        }
-        if (!cancelled) await loadSession(currentAccess);
-      } catch {
-        if (!cancelled) clearSession();
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  /**
+   * Brings back a saved session. A rejected session (expired, revoked, not an
+   * advocate) is cleared; an unreachable API is not, so a restart of the API
+   * does not sign anyone out.
+   */
+  const restoreSession = useCallback(async () => {
+    const { access, refresh } = readStoredTokens();
+    if (!access || !refresh) {
+      setLoading(false);
+      return;
     }
+    setLoading(true);
+    try {
+      let currentAccess = access;
+      if (isTokenExpired(currentAccess)) {
+        const pair = await authClient.refresh(refresh);
+        currentAccess = pair.access_token;
+        applyTokens(pair.access_token, pair.refresh_token);
+      } else {
+        setAccessToken(currentAccess);
+        setRefreshToken(refresh);
+      }
+      await loadSession(currentAccess);
+      setSessionIssue(null);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.isNetworkError) {
+        setSessionIssue('network');
+      } else {
+        clearSession();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [applyTokens, clearSession, loadSession]);
 
-    void restore();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => {
+    // Once only, even under React strict mode's double effect: refresh tokens
+    // rotate, so a second refresh with the same token would sign the person out.
+    if (restoreStarted.current) return;
+    restoreStarted.current = true;
+    void restoreSession();
+  }, [restoreSession]);
+
+  /** Applies a fresh token pair and loads the advocate profile behind it. */
+  const establishSession = useCallback(
+    async (pair: TokenPair) => {
+      applyTokens(pair.access_token, pair.refresh_token);
+      try {
+        await loadSession(pair.access_token);
+      } catch (err) {
+        clearSession();
+        if (err instanceof ApiRequestError && (err.status === 403 || err.status === 404)) {
+          // A valid account that is not an advocate (for example a consumer account).
+          void authClient.logout(pair.refresh_token).catch(() => undefined);
+          throw new ApiRequestError(
+            403,
+            'not_an_advocate',
+            "This email isn't registered as an advocate. Register as an advocate first.",
+          );
+        }
+        throw err;
+      }
+    },
+    [applyTokens, clearSession, loadSession],
+  );
 
   const registerAdvocate = useCallback(
     async (payload: AdvocateRegisterPayload) => {
-      const pair = await authClient.registerAdvocate(payload);
-      applyTokens(pair.access_token, pair.refresh_token);
-      await loadSession(pair.access_token);
+      await establishSession(await authClient.registerAdvocate(payload));
     },
-    [applyTokens, loadSession],
+    [establishSession],
   );
 
   const login = useCallback(
     async (payload: LoginPayload) => {
-      const pair = await authClient.login(payload);
-      applyTokens(pair.access_token, pair.refresh_token);
-      await loadSession(pair.access_token);
+      await establishSession(await authClient.login(payload));
     },
-    [applyTokens, loadSession],
+    [establishSession],
   );
 
   const logout = useCallback(async () => {
@@ -155,18 +196,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearSession();
   }, [refreshToken, clearSession]);
 
+  /** The current access token, rotated first when it is about to expire. */
+  const getValidAccessToken = useCallback(async (): Promise<string> => {
+    if (!accessToken || !refreshToken) {
+      throw new ApiRequestError(401, 'unauthorized', 'You are not signed in.');
+    }
+    if (!isTokenExpired(accessToken)) return accessToken;
+    try {
+      const pair = await authClient.refresh(refreshToken);
+      applyTokens(pair.access_token, pair.refresh_token);
+      return pair.access_token;
+    } catch (err) {
+      if (err instanceof ApiRequestError && !err.isNetworkError) {
+        clearSession();
+        throw new ApiRequestError(401, 'session_expired', 'Your session has expired. Log in again.');
+      }
+      throw err;
+    }
+  }, [accessToken, refreshToken, applyTokens, clearSession]);
+
   const updateProfile = useCallback(
     async (payload: AdvocateProfileUpdatePayload) => {
-      if (!accessToken) throw new ApiRequestError(401, 'unauthorized', 'Not signed in.');
-      setProfile(await authClient.updateAdvocateProfile(accessToken, payload));
+      const token = await getValidAccessToken();
+      setProfile(await authClient.updateAdvocateProfile(token, payload));
     },
-    [accessToken],
+    [getValidAccessToken],
   );
 
   const refresh = useCallback(async () => {
     if (!accessToken) return;
-    await loadSession(accessToken);
-  }, [accessToken, loadSession]);
+    await loadSession(await getValidAccessToken());
+  }, [accessToken, getValidAccessToken, loadSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -174,13 +234,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       accessToken,
       loading,
+      sessionIssue,
+      retrySession: restoreSession,
       registerAdvocate,
       login,
       logout,
       updateProfile,
       refresh,
     }),
-    [user, profile, accessToken, loading, registerAdvocate, login, logout, updateProfile, refresh],
+    [
+      user,
+      profile,
+      accessToken,
+      loading,
+      sessionIssue,
+      restoreSession,
+      registerAdvocate,
+      login,
+      logout,
+      updateProfile,
+      refresh,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
