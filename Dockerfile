@@ -58,6 +58,8 @@ COPY --from=web /repo/apps/web/.next/standalone /app/web/
 COPY --from=web /repo/apps/web/.next/static /app/web/apps/web/.next/static
 COPY --from=web /repo/apps/web/public /app/web/apps/web/public
 COPY infrastructure/railway/start.sh /app/start.sh
+# A copy edited on Windows may have CRLF line endings, which bash rejects.
+RUN sed -i 's/\r$//' /app/start.sh
 
 WORKDIR /app
 CMD ["bash", "/app/start.sh"]
