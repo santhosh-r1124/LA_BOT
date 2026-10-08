@@ -1,6 +1,10 @@
 # Normalise line endings: LF in the repo, native on checkout for text files.
 * text=auto eol=lf
 
+# Windows launchers need CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
 # Always LF (executed in Linux containers / CI)
 *.sh   text eol=lf
 *.mjs  text eol=lf
