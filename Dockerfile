@@ -1,7 +1,7 @@
-# LA_BOT production image: the Next.js web app and the FastAPI API in one
+# LA_BOT all-in-one image (used by docker-compose.yml / START-LA-BOT.bat): the Next.js web app and the FastAPI API in one
 # container. The web server listens on $PORT and proxies /api/v1 and /health
 # to the API on 127.0.0.1:18000, so the browser only talks to one origin (no
-# CORS, no API URL to configure). Started by infrastructure/railway/start.sh.
+# CORS, no API URL to configure). Started by infrastructure/docker/app-start.sh.
 
 # ---- web app: Next.js standalone build ------------------------------------
 FROM node:22-slim AS web
@@ -57,7 +57,7 @@ RUN uv sync && which uvicorn alembic && python -c "from app.main import app"
 COPY --from=web /repo/apps/web/.next/standalone /app/web/
 COPY --from=web /repo/apps/web/.next/static /app/web/apps/web/.next/static
 COPY --from=web /repo/apps/web/public /app/web/apps/web/public
-COPY infrastructure/railway/start.sh /app/start.sh
+COPY infrastructure/docker/app-start.sh /app/start.sh
 # A copy edited on Windows may have CRLF line endings, which bash rejects.
 RUN sed -i 's/\r$//' /app/start.sh
 

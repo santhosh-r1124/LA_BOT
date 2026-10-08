@@ -83,7 +83,7 @@ See the table in the root [`README.md`](../README.md#monorepo-layout). Principle
 
 | Concern       | Choice                        | Why                                                             |
 | ------------- | ----------------------------- | ------------------------------------------------------------- |
-| Frontend      | Next.js 15 / React 19         | App Router, RSC, first-class Vercel deploy, strong ecosystem   |
+| Frontend      | Next.js 15 / React 19         | App Router, RSC, strong ecosystem   |
 | Styling       | Tailwind CSS v4               | Fast iteration, no runtime cost                                |
 | API           | FastAPI + Pydantic v2         | Async, typed, OpenAPI out of the box                          |
 | ORM           | SQLAlchemy 2.0 (async)        | Mature, explicit, works with pgvector                          |
@@ -107,8 +107,7 @@ Decision records: [`adr/`](adr/).
   the response header and attached to every log line.
 - **Health**: `/health` (liveness, no deps) vs `/health/ready` (checks Postgres +
   Redis, 503 when unhealthy).
-- **Environments**: `development` (Docker Compose) · `staging` / `production`
-  (Supabase Postgres, managed Redis). See [`environments.md`](environments.md).
+- **Environments**: local only (Docker Compose). See [`environments.md`](environments.md).
 
 ## 6. Security posture (hardened in Phase 13)
 

@@ -166,8 +166,8 @@ legal-platform/
 │   ├── auth/                # Shared auth types + token helpers
 │   └── shared/              # Cross-cutting enums, constants, API contracts
 ├── infrastructure/
-│   ├── docker/              # docker-compose + service Dockerfiles + Postgres init
-│   └── deployment/          # staging/prod config, deploy notes (Phase 15)
+│   ├── docker/              # docker-compose, all-in-one container start script, Postgres init
+│   └── local/               # Windows launcher + API smoke checks
 └── docs/                    # architecture, roadmap, ADRs, runbooks
 ```
 
@@ -177,10 +177,10 @@ legal-platform/
 | ---------------- | -------------------------------------------------------- |
 | Frontend         | Next.js 15 (App Router, React 19), Tailwind CSS v4, shared design system (`packages/shared/src/styles`) |
 | Backend API      | FastAPI, Pydantic v2, SQLAlchemy 2.0 (async), Uvicorn    |
-| Database         | PostgreSQL 16 + `pgvector` (local: Docker; staging/prod: Supabase) |
+| Database         | PostgreSQL 16 + `pgvector` (Docker) |
 | Cache / queue    | Redis 7                                                  |
 | Migrations       | Alembic (schema owned by `apps/api`)                     |
-| Logging          | `structlog` (console in dev, JSON in staging/prod)       |
+| Logging          | `structlog` (console)       |
 | LLM              | Provider-agnostic: Google Gemini (free tier, default), Groq (free), Ollama (local), Anthropic (optional, paid) |
 | Embeddings       | Google Gemini (`gemini-embedding-001`, free tier)         |
 | JS monorepo      | pnpm workspaces + Turborepo                              |

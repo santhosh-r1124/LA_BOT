@@ -2,7 +2,7 @@
 # Starts the whole app in one container (see the repo-root Dockerfile):
 #   API  (FastAPI/uvicorn) on $API_HOST:$API_PORT (127.0.0.1 = internal only)
 #   web  (Next.js)         on 0.0.0.0:$PORT, proxies /api/v1 and /health to the API
-# Exits as soon as either process stops, so the platform restarts the container.
+# Exits as soon as either process stops, so Docker restarts the container.
 set -uo pipefail
 
 PORT="${PORT:-8080}"
