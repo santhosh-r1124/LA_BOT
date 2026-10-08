@@ -61,5 +61,6 @@ separated with `;`).
 ## Running locally
 
 See `docker-compose.yml`: put `GEMINI_API_KEY=...` in a `.env` file next to
-it and run `docker compose up --build`, then open http://localhost:3000 (the
-API is also published at http://localhost:8000, docs at `/docs`).
+it and run `docker compose up --build`, then open http://localhost:3010 (the
+API is also published at http://localhost:8010, docs at `/docs`; set
+WEB_PORT / API_PORT in `.env` to use other ports).
