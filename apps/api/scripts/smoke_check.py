@@ -1,6 +1,6 @@
 """End-to-end API checks against a running LA_BOT.
 
-    python infrastructure/local/e2e_api_checks.py [BASE_URL] [RESULTS_JSON]
+    python apps/api/scripts/smoke_check.py [BASE_URL] [RESULTS_JSON]
 
 BASE_URL defaults to http://localhost:3000. Every advocate count is compared
 with a count computed independently from apps/api/data/advocates.csv, so the
@@ -20,7 +20,7 @@ from pathlib import Path
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:3000").rstrip("/")
 OUT = sys.argv[2] if len(sys.argv) > 2 else "e2e-results.json"
-CSV = Path(__file__).resolve().parents[2] / "apps" / "api" / "data" / "advocates.csv"
+CSV = Path(__file__).resolve().parents[1] / "data" / "advocates.csv"
 with open(CSV, encoding="utf-8-sig") as _fh:
     rows = list(csv.DictReader(_fh))
 log: list[dict] = []
