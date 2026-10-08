@@ -492,3 +492,21 @@ async def test_provider_health_records_last_outcome() -> None:
     await _scripted(models).complete(system="s", messages=[("user", "q")], max_tokens=10)
     health = provider_health()
     assert health is not None and health.ok is True and health.model == "gemini-3.5-flash"
+
+
+async def test_gemini_complete_json_retries_without_schema_on_unclassified_errors() -> None:
+    schema_rejected = _google_error(400, "INVALID_ARGUMENT", "Invalid value at 'response_schema'")
+
+    class _SchemaPickyModels(_ScriptedGeminiModels):
+        async def generate_content(self, **kwargs: Any) -> _FakeGeminiResponse:
+            self.calls.append((kwargs["model"], kwargs["config"].response_json_schema is not None))
+            if kwargs["config"].response_json_schema is not None:
+                raise schema_rejected
+            return _FakeGeminiResponse('{"category": "IP_LAW"}')
+
+    models = _SchemaPickyModels({})
+    data = await _scripted(models).complete_json(
+        system="s", message="m", schema={"type": "object"}, schema_name="x", max_tokens=10
+    )
+    assert data == {"category": "IP_LAW"}
+    assert models.calls == [("gemini-3.5-flash", True), ("gemini-3.5-flash", False)]

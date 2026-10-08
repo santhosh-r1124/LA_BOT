@@ -443,14 +443,28 @@ class GeminiProvider:
         schema_name: str,
         max_tokens: int,
     ) -> dict[str, Any]:
-        response = await self._generate(
-            operation="complete_json",
-            contents=self._contents([("user", message)]),
-            system=system,
-            max_tokens=max_tokens,
-            response_mime_type="application/json",
-            response_json_schema=schema,
-        )
+        contents = self._contents([("user", message)])
+        try:
+            response = await self._generate(
+                operation="complete_json",
+                contents=contents,
+                system=system,
+                max_tokens=max_tokens,
+                response_mime_type="application/json",
+                response_json_schema=schema,
+            )
+        except ServiceUnavailableError as exc:
+            if exc.code != "llm_error":
+                raise
+            # Unclassified failure: the model may not accept schema-constrained
+            # output. Ask for the same JSON through the instructions instead.
+            response = await self._generate(
+                operation="complete_json",
+                contents=contents,
+                system=system + _json_instruction(schema),
+                max_tokens=max_tokens,
+                response_mime_type="application/json",
+            )
         return _parse_json_object(response.text or "")
 
 

@@ -526,3 +526,36 @@ async def test_status_reports_real_counts_and_no_secrets(db_client: AsyncClient)
     assert body["advocate_directory"]["available"] is True
     assert body["features"] == {"open_login": False, "general_answers": True}
     assert "generated_at" in body
+
+
+# ---------------------------------------------------------------------------
+# AI connection check
+# ---------------------------------------------------------------------------
+
+
+async def test_check_llm_reports_not_configured(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/status/check-llm")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["error_code"] == "llm_not_configured"
+
+
+async def test_check_llm_reports_success(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.v1.routes import meta
+
+    class _Provider:
+        name = "gemini"
+        model = "gemini-flash-latest"
+
+        async def complete(self, **_kwargs: object) -> str:
+            return "OK"
+
+    monkeypatch.setattr(meta, "get_provider", lambda settings: _Provider())
+    resp = await client.post("/api/v1/status/check-llm")
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["provider"] == "gemini"
+    assert body["latency_ms"] is not None

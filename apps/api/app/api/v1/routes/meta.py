@@ -3,6 +3,7 @@ frontends to show *real* availability instead of assuming features work."""
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
@@ -10,10 +11,12 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, SettingsDep
+from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger
 from app.models.legal_document import IngestionStatus, LegalDocument
 from app.models.user import AdvocateProfile, VerificationStatus
-from app.services.llm_provider import describe_provider, provider_health
+from app.services.llm_provider import describe_provider, get_provider, provider_health
+from app.services.rate_limit import AIRateLimit
 
 router = APIRouter()
 logger = get_logger("app.meta")
@@ -150,4 +153,48 @@ async def read_status(settings: SettingsDep, db: DbSession) -> StatusResponse:
         features=FeatureFlags(
             open_login=settings.open_login, general_answers=settings.allow_general_answers
         ),
+    )
+
+
+class LLMCheckResponse(BaseModel):
+    ok: bool
+    provider: str | None
+    model: str | None
+    latency_ms: float | None
+    error_code: str | None
+    error_message: str | None
+
+
+@router.post(
+    "/status/check-llm",
+    response_model=LLMCheckResponse,
+    summary="Make one tiny model call to test the AI connection",
+)
+async def check_llm(settings: SettingsDep, _rate_limit: AIRateLimit) -> LLMCheckResponse:
+    """Spends one small request of the provider's quota, so it only runs on
+    demand (the home page's "Test AI connection" button)."""
+    info = describe_provider(settings)
+    start = time.perf_counter()
+    try:
+        provider = get_provider(settings)
+        await provider.complete(
+            system="Reply with the single word OK.", messages=[("user", "ping")], max_tokens=10
+        )
+    except ServiceUnavailableError as exc:
+        return LLMCheckResponse(
+            ok=False,
+            provider=info.provider,
+            model=info.model,
+            latency_ms=None,
+            error_code=exc.code,
+            error_message=exc.message,
+        )
+    health = provider_health()
+    return LLMCheckResponse(
+        ok=True,
+        provider=provider.name,
+        model=health.model if health and health.ok else provider.model,
+        latency_ms=round((time.perf_counter() - start) * 1000, 1),
+        error_code=None,
+        error_message=None,
     )

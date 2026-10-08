@@ -58,14 +58,7 @@ practice_area, state, city, language_code` (common alternatives such as
 `mobile` or `specialization` are recognised; several values in one cell are
 separated with `;`).
 
-## Running the same image locally
+## Running locally
 
-```bash
-docker network create labot
-docker run -d --name labot-pg --network labot -e POSTGRES_USER=labot -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=labot pgvector/pgvector:pg17
-docker run -d --name labot-redis --network labot redis:7-alpine
-docker build -t labot .
-docker run -d --name labot --network labot -p 8080:8080 -e DATABASE_URL=postgresql://labot:pw@labot-pg:5432/labot -e REDIS_URL=redis://labot-redis:6379/0 -e LLM_PROVIDER=gemini -e GEMINI_API_KEY=YOUR_KEY labot
-```
-
-Then open http://localhost:8080.
+See `docker-compose.yml`: put `GEMINI_API_KEY=...` in a `.env` file next to
+it and run `docker compose up --build`, then open http://localhost:8080.

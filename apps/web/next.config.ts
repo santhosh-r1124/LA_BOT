@@ -14,6 +14,10 @@ const nextConfig: NextConfig = {
         { source: '/api/v1/:path*', destination: `${apiInternalUrl}/api/v1/:path*` },
         { source: '/health', destination: `${apiInternalUrl}/health` },
         { source: '/health/ready', destination: `${apiInternalUrl}/health/ready` },
+        // Interactive API docs (served by the API outside APP_ENV=production).
+        { source: '/docs', destination: `${apiInternalUrl}/docs` },
+        { source: '/redoc', destination: `${apiInternalUrl}/redoc` },
+        { source: '/openapi.json', destination: `${apiInternalUrl}/openapi.json` },
       ];
     },
     // AI drafts can take well over the 30s proxy default.

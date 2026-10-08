@@ -30,8 +30,20 @@ export interface PlatformStatus {
   features?: { open_login: boolean; general_answers: boolean };
 }
 
+/** Mirrors `POST /api/v1/status/check-llm`. */
+export interface LlmCheck {
+  ok: boolean;
+  provider: string | null;
+  model: string | null;
+  latency_ms: number | null;
+  error_code: string | null;
+  error_message: string | null;
+}
+
 export const statusClient = {
   get: () => apiFetch<PlatformStatus>('/api/v1/status', { timeoutMs: 8_000 }),
+  checkLlm: () =>
+    apiFetch<LlmCheck>('/api/v1/status/check-llm', { method: 'POST', timeoutMs: 90_000 }),
 };
 
 export type StatusState =

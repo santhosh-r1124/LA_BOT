@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { formatRelativeTime, StatusBadge, type Tone } from '@/components/ui';
-import { providerLabel, usePlatformStatus } from '@/lib/status-client';
+import { ApiRequestError } from '@/lib/api-client';
+import { providerLabel, statusClient, usePlatformStatus } from '@/lib/status-client';
 
 type InfraStatus = 'loading' | 'ok' | 'degraded' | 'error';
 
@@ -56,6 +57,32 @@ export function SystemStatus() {
   const { state, reload } = usePlatformStatus();
   const [infra, setInfra] = useState<InfraHealth>({ status: 'loading', detail: 'Checking…' });
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [aiCheck, setAiCheck] = useState<
+    { kind: 'idle' } | { kind: 'running' } | { kind: 'done'; ok: boolean; message: string }
+  >({ kind: 'idle' });
+
+  const testAi = () => {
+    setAiCheck({ kind: 'running' });
+    statusClient
+      .checkLlm()
+      .then((r) =>
+        setAiCheck({
+          kind: 'done',
+          ok: r.ok,
+          message: r.ok
+            ? `Working: ${providerLabel(r.provider)} (${r.model}) answered in ${Math.round(r.latency_ms ?? 0)} ms.`
+            : (r.error_message ?? 'The AI check failed.'),
+        }),
+      )
+      .catch((err: unknown) =>
+        setAiCheck({
+          kind: 'done',
+          ok: false,
+          message: err instanceof ApiRequestError ? err.message : 'Could not run the check.',
+        }),
+      )
+      .finally(reload);
+  };
 
   const loadInfra = useCallback(() => {
     setInfra((prev) => ({ ...prev, status: 'loading' }));
@@ -164,6 +191,23 @@ export function SystemStatus() {
                 )
               }
             />
+            {llm.configured && (
+              <div className="border-line -mt-px flex flex-wrap items-center gap-3 border-b pb-3">
+                <button
+                  type="button"
+                  onClick={testAi}
+                  disabled={aiCheck.kind === 'running'}
+                  className="btn btn-secondary btn-sm"
+                >
+                  {aiCheck.kind === 'running' ? 'Testing…' : 'Test AI connection'}
+                </button>
+                {aiCheck.kind === 'done' && (
+                  <p role="status" className={`text-xs ${aiCheck.ok ? 'text-ok' : 'text-danger'}`}>
+                    {aiCheck.message}
+                  </p>
+                )}
+              </div>
+            )}
             <Row
               label="Advocate directory"
               value={
