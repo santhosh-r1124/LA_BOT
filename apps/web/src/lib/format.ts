@@ -22,22 +22,29 @@ export function formatInr(value: string | null): string | null {
   });
 }
 
-// Category codes that read oddly as an advocate's practice area.
-const PRACTICE_AREA_LABELS: Record<string, string> = {
-  ADVOCATE_REQUIRED: 'Disputes & Litigation',
-  DOCUMENT_GUIDANCE: 'Documents & Drafting',
-};
-
+/** `CYBER_LAW` -> `Cyber Law`, `DOCUMENT_GUIDANCE` -> `Document Guidance`. */
 export function practiceAreaLabel(code: string): string {
-  return PRACTICE_AREA_LABELS[code] ?? formatEnumLabel(code);
+  return formatEnumLabel(code);
 }
 
 export function stateName(code: string): string {
   return (INDIAN_STATE_NAMES as Record<string, string>)[code] ?? code;
 }
 
+/** `TN` -> `TN — Tamil Nadu`: the stored code first, as filtered on. */
+export function stateOptionLabel(code: string): string {
+  const name = stateName(code);
+  return name === code ? code : `${code} — ${name}`;
+}
+
 export function languageName(code: string): string {
   return LANGUAGE_NAMES[code] ?? code;
+}
+
+/** `ta` -> `ta — Tamil`. */
+export function languageOptionLabel(code: string): string {
+  const name = languageName(code);
+  return name === code ? code : `${code} — ${name}`;
 }
 
 /** Indian 10-digit mobiles as `+91 98765 43210`; anything else unchanged. */

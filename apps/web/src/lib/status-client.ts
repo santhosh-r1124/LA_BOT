@@ -23,9 +23,25 @@ export interface PlatformStatus {
     documents_indexed: number | null;
     documents_failed: number | null;
     chunks_indexed: number | null;
+    /** Chunks with an embedding (semantic search); the rest are keyword-only. */
+    chunks_embedded?: number | null;
     last_indexed_at: string | null;
+    /** Documents per origin: a Hugging Face dataset id, or "official sources". */
+    sources?: Array<{ dataset: string; documents: number }>;
+    /** Background Hugging Face load started with the API. */
+    corpus_load?: {
+      state: 'not_started' | 'disabled' | 'running' | 'done' | 'failed';
+      dataset: string | null;
+      message: string | null;
+      updated_at: string | null;
+    } | null;
   };
-  advocate_directory: { available: boolean; verified_advocates: number | null };
+  advocate_directory: {
+    available: boolean;
+    /** All listed advocates, including sample (synthetic) listings. */
+    verified_advocates: number | null;
+    sample_advocates?: number | null;
+  };
   /** Server feature switches (absent on older API versions). */
   features?: { open_login: boolean; general_answers: boolean };
 }

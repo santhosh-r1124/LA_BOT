@@ -7,6 +7,8 @@ export class ApiRequestError extends Error {
     readonly code: string,
     message: string,
     readonly requestId?: string,
+    /** Field-level reasons for validation errors (422). */
+    readonly details?: Array<{ field: string; message: string }>,
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -58,9 +60,14 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
         payload.error.code,
         payload.error.message,
         payload.error.request_id,
+        payload.error.details,
       );
     }
-    throw new ApiRequestError(response.status, 'http_error', `Request failed (${response.status}).`);
+    throw new ApiRequestError(
+      response.status,
+      'http_error',
+      `Request failed (${response.status}).`,
+    );
   }
 
   return payload as T;

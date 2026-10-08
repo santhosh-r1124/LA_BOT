@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { isLegalCategory, isRiskLevel, requiresAdvocate } from './legal';
+import {
+  INDIAN_STATES,
+  INDIAN_STATE_NAMES,
+  LEGACY_STATE_CODES,
+  PRACTICE_AREAS,
+  isLegalCategory,
+  isRiskLevel,
+  requiresAdvocate,
+} from './legal';
 import { hasAdminAccess, isRole } from './roles';
 
 describe('legal guards', () => {
@@ -18,6 +26,27 @@ describe('legal guards', () => {
     expect(requiresAdvocate('MEDIUM')).toBe(false);
     expect(requiresAdvocate('HIGH')).toBe(true);
     expect(requiresAdvocate('CRITICAL')).toBe(true);
+  });
+});
+
+describe('state and practice-area lists', () => {
+  it('uses the advocate-data state codes and still names legacy ISO codes', () => {
+    for (const code of ['TN', 'TS', 'OD', 'CG', 'UK', 'GO', 'KA', 'KL', 'AP']) {
+      expect(INDIAN_STATES).toContain(code);
+    }
+    expect(INDIAN_STATE_NAMES.TN).toBe('Tamil Nadu');
+    expect(INDIAN_STATE_NAMES.TS).toBe('Telangana');
+    for (const code of LEGACY_STATE_CODES) {
+      expect(INDIAN_STATES).not.toContain(code);
+      expect(INDIAN_STATE_NAMES[code]).toBeTruthy();
+    }
+  });
+
+  it('offers the 14 practice areas, including Document Guidance and Advocate Required', () => {
+    expect(PRACTICE_AREAS).toHaveLength(14);
+    expect(PRACTICE_AREAS).toContain('DOCUMENT_GUIDANCE');
+    expect(PRACTICE_AREAS).toContain('ADVOCATE_REQUIRED');
+    expect(PRACTICE_AREAS).not.toContain('OUT_OF_SCOPE');
   });
 });
 

@@ -8,6 +8,12 @@ export interface SourceOut {
   section: string | null;
   article: string | null;
   source_url: string;
+  /** Present only when the source dataset provides them; never inferred. */
+  court?: string | null;
+  date?: string | null;
+  citation?: string | null;
+  /** Hugging Face dataset id the document came from. */
+  dataset?: string | null;
 }
 
 export interface ChatMessageOut {

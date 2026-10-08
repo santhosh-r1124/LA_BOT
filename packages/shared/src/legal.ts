@@ -37,32 +37,73 @@ export const JURISDICTION_SCOPES = [
 export type JurisdictionScope = (typeof JURISDICTION_SCOPES)[number];
 
 /**
- * Indian states and union territories (ISO 3166-2:IN short codes).
- * Used for advocate location, jurisdiction detection and stamp-duty routing.
+ * Indian states and union territories, in the code convention used by the
+ * advocate data (TN, TS, OD, CG, UK, GO, ...). Codes are case-sensitive and
+ * stored exactly as written. Mirrored in apps/api app/core/india.py (STATE_NAMES).
  */
 export const INDIAN_STATES = [
-  'AN', 'AP', 'AR', 'AS', 'BR', 'CH', 'CT', 'DN', 'DL', 'GA', 'GJ', 'HR', 'HP',
-  'JK', 'JH', 'KA', 'KL', 'LA', 'LD', 'MP', 'MH', 'MN', 'ML', 'MZ', 'NL', 'OR',
-  'PY', 'PB', 'RJ', 'SK', 'TN', 'TG', 'TR', 'UP', 'UT', 'WB',
+  'AN',
+  'AP',
+  'AR',
+  'AS',
+  'BR',
+  'CH',
+  'CG',
+  'DN',
+  'DL',
+  'GO',
+  'GJ',
+  'HR',
+  'HP',
+  'JK',
+  'JH',
+  'KA',
+  'KL',
+  'LA',
+  'LD',
+  'MP',
+  'MH',
+  'MN',
+  'ML',
+  'MZ',
+  'NL',
+  'OD',
+  'PY',
+  'PB',
+  'RJ',
+  'SK',
+  'TN',
+  'TS',
+  'TR',
+  'UP',
+  'UK',
+  'WB',
 ] as const;
 export type IndianStateCode = (typeof INDIAN_STATES)[number];
 
-/** Display names for {@link INDIAN_STATES}. Mirrored in apps/api advocate_import.STATE_NAMES. */
-export const INDIAN_STATE_NAMES: Record<IndianStateCode, string> = {
+/**
+ * ISO 3166-2:IN codes that differ from the convention above. Valid, and kept
+ * as written when data uses them (a CSV row with CT stays CT).
+ */
+export const LEGACY_STATE_CODES = ['CT', 'GA', 'OR', 'TG', 'UT'] as const;
+export type LegacyStateCode = (typeof LEGACY_STATE_CODES)[number];
+
+/** Display names for {@link INDIAN_STATES} and {@link LEGACY_STATE_CODES}. */
+export const INDIAN_STATE_NAMES: Record<IndianStateCode | LegacyStateCode, string> = {
   AN: 'Andaman and Nicobar Islands',
   AP: 'Andhra Pradesh',
   AR: 'Arunachal Pradesh',
   AS: 'Assam',
   BR: 'Bihar',
   CH: 'Chandigarh',
-  CT: 'Chhattisgarh',
+  CG: 'Chhattisgarh',
   DN: 'Dadra and Nagar Haveli and Daman and Diu',
   DL: 'Delhi',
-  GA: 'Goa',
+  GO: 'Goa',
   GJ: 'Gujarat',
   HR: 'Haryana',
   HP: 'Himachal Pradesh',
-  JK: 'Jammu and Kashmir',
+  JK: 'Jammu & Kashmir',
   JH: 'Jharkhand',
   KA: 'Karnataka',
   KL: 'Kerala',
@@ -74,20 +115,30 @@ export const INDIAN_STATE_NAMES: Record<IndianStateCode, string> = {
   ML: 'Meghalaya',
   MZ: 'Mizoram',
   NL: 'Nagaland',
-  OR: 'Odisha',
+  OD: 'Odisha',
   PY: 'Puducherry',
   PB: 'Punjab',
   RJ: 'Rajasthan',
   SK: 'Sikkim',
   TN: 'Tamil Nadu',
-  TG: 'Telangana',
+  TS: 'Telangana',
   TR: 'Tripura',
   UP: 'Uttar Pradesh',
-  UT: 'Uttarakhand',
+  UK: 'Uttarakhand',
   WB: 'West Bengal',
+  CT: 'Chhattisgarh',
+  GA: 'Goa',
+  OR: 'Odisha',
+  TG: 'Telangana',
+  UT: 'Uttarakhand',
 };
 
-/** Language codes used for advocate profiles. Mirrored in apps/api advocate_import.LANGUAGE_NAMES. */
+/** Advocate practice areas: every legal category except OUT_OF_SCOPE. */
+export const PRACTICE_AREAS = LEGAL_CATEGORIES.filter(
+  (c): c is Exclude<LegalCategory, 'OUT_OF_SCOPE'> => c !== 'OUT_OF_SCOPE',
+);
+
+/** Language codes (lower-case) used for advocate profiles. Mirrored in apps/api app/core/india.py. */
 export const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
   hi: 'Hindi',

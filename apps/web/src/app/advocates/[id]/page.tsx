@@ -9,10 +9,10 @@ import { advocateClient, type AdvocateDirectoryEntry } from '@/lib/advocate-clie
 import {
   formatInr,
   formatPhone,
-  languageName,
+  languageOptionLabel,
   phoneHref,
   practiceAreaLabel,
-  stateName,
+  stateOptionLabel,
 } from '@/lib/format';
 
 export default function AdvocateProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -78,13 +78,40 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
             <div>
               <h1 className="display text-2xl">{advocate.display_name || 'Advocate'}</h1>
               <p className="muted mt-1 text-sm">
-                {advocate.city}, {stateName(advocate.state_code)}
+                {advocate.city}, {stateOptionLabel(advocate.state_code)}
               </p>
             </div>
-            <StatusBadge tone="ok">Verified by platform</StatusBadge>
+            {advocate.is_sample ? (
+              <StatusBadge tone="warn">Sample listing · not verified</StatusBadge>
+            ) : (
+              <StatusBadge tone="ok">Verified by platform</StatusBadge>
+            )}
           </div>
 
-          {(advocate.phone || advocate.email) && (
+          {advocate.is_sample && (
+            <div className="alert alert-warn mt-4" role="note">
+              <p className="text-sm">
+                This is synthetic sample data for trying the directory, not a real advocate. The
+                name and contact details are made up and have not been verified. Don&apos;t contact
+                them or rely on them for legal help.
+              </p>
+            </div>
+          )}
+
+          {advocate.is_sample && (advocate.phone || advocate.email) && (
+            <section className="surface-flat mt-6 p-4">
+              <h2 className="subtle text-xs font-semibold uppercase tracking-wider">
+                Contact (sample data, not real)
+              </h2>
+              <p className="muted mt-1.5 text-sm">
+                {[advocate.phone && formatPhone(advocate.phone), advocate.email]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </section>
+          )}
+
+          {!advocate.is_sample && (advocate.phone || advocate.email) && (
             <section className="surface-flat mt-6 flex flex-wrap items-center gap-3 p-4">
               <h2 className="subtle w-full text-xs font-semibold uppercase tracking-wider">
                 Contact
@@ -118,7 +145,7 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
             {advocate.languages.length > 0 && (
               <div className="surface-flat p-3">
                 <dt className="subtle text-xs">Languages</dt>
-                <dd className="mt-0.5">{advocate.languages.map(languageName).join(', ')}</dd>
+                <dd className="mt-0.5">{advocate.languages.map(languageOptionLabel).join(', ')}</dd>
               </div>
             )}
             {advocate.practice_areas.length > 0 && (

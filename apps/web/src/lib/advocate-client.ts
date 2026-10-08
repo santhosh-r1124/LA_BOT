@@ -16,6 +16,8 @@ export interface AdvocateDirectoryEntry {
   availability: Record<string, unknown> | null;
   email: string | null;
   phone: string | null;
+  /** Synthetic demo listing (e.g. the bundled advocates.csv), not a real advocate. */
+  is_sample: boolean;
 }
 
 /** Mirrors `AdvocateImportReport` (apps/api/app/schemas/admin.py). */
@@ -34,17 +36,40 @@ export interface PaginatedAdvocateDirectory {
   total: number;
   limit: number;
   offset: number;
+  page: number;
+  page_size: number;
 }
 
+/** Query parameters of `GET /api/v1/advocates`. Codes are case-sensitive. */
 export interface AdvocateSearchFilters {
+  /** Category code (CYBER_LAW) or name (Cyber Law). */
   practice_area?: string;
-  state_code?: string;
+  /** Upper-case state code, e.g. TN. */
+  state?: string;
+  /** Substring match, case-insensitive. */
   city?: string;
-  language?: string;
+  /** Lower-case language code, e.g. ta. */
+  language_code?: string;
   min_experience_years?: number;
   max_consultation_fee?: string;
-  limit?: number;
-  offset?: number;
+  page?: number;
+  page_size?: number;
+}
+
+/** Mirrors `FacetValue` / `AdvocateFacets` (apps/api/app/schemas/advocate.py). */
+export interface FacetValue {
+  code: string;
+  label: string;
+  count: number;
+}
+
+export interface AdvocateFacets {
+  total: number;
+  sample_count: number;
+  practice_areas: FacetValue[];
+  states: FacetValue[];
+  languages: FacetValue[];
+  cities: FacetValue[];
 }
 
 function toQueryString(filters: AdvocateSearchFilters): string {
@@ -61,8 +86,10 @@ export const advocateClient = {
   search: (filters: AdvocateSearchFilters = {}) =>
     apiFetch<PaginatedAdvocateDirectory>(`/api/v1/advocates${toQueryString(filters)}`),
 
-  get: (advocateId: string) =>
-    apiFetch<AdvocateDirectoryEntry>(`/api/v1/advocates/${advocateId}`),
+  /** Filter values present in the directory, with counts. */
+  facets: () => apiFetch<AdvocateFacets>('/api/v1/advocates/facets'),
+
+  get: (advocateId: string) => apiFetch<AdvocateDirectoryEntry>(`/api/v1/advocates/${advocateId}`),
 
   /** Admin-only CSV upload (multipart, so not via apiFetch's JSON body). */
   async importCsv(file: File, token: string, dryRun: boolean): Promise<AdvocateImportReport> {
@@ -82,7 +109,11 @@ export const advocateClient = {
       if (isApiError(payload)) {
         throw new ApiRequestError(response.status, payload.error.code, payload.error.message);
       }
-      throw new ApiRequestError(response.status, 'http_error', `Upload failed (${response.status}).`);
+      throw new ApiRequestError(
+        response.status,
+        'http_error',
+        `Upload failed (${response.status}).`,
+      );
     }
     return payload as AdvocateImportReport;
   },

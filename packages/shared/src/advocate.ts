@@ -8,7 +8,7 @@ export interface AdvocateProfile {
   id: string;
   user_id: string;
   practice_areas: string[];
-  /** ISO-3166-2:IN state code. */
+  /** State code as stored (e.g. TN); see INDIAN_STATES. Case-sensitive. */
   state_code: string;
   city: string;
   languages: string[];

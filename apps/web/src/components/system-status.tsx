@@ -156,13 +156,27 @@ export function SystemStatus() {
               value={
                 !kb.available
                   ? 'Could not read the knowledge base.'
-                  : kb.documents_indexed
-                    ? `${kb.documents_indexed} official source${kb.documents_indexed === 1 ? '' : 's'} · ${(kb.chunks_indexed ?? 0).toLocaleString('en-IN')} passages · updated ${formatRelativeTime(kb.last_indexed_at)}`
-                    : 'No official sources indexed yet — chat gives general legal information.'
+                  : [
+                      kb.documents_indexed
+                        ? `${kb.documents_indexed} document${kb.documents_indexed === 1 ? '' : 's'} · ${(kb.chunks_indexed ?? 0).toLocaleString('en-IN')} passages (${(kb.chunks_embedded ?? 0).toLocaleString('en-IN')} with embeddings) · updated ${formatRelativeTime(kb.last_indexed_at)}`
+                        : 'No legal documents indexed yet — chat says so and gives general information.',
+                      kb.sources?.length
+                        ? `From: ${kb.sources.map((s) => `${s.dataset} (${s.documents})`).join(', ')}`
+                        : null,
+                      kb.corpus_load && ['running', 'failed'].includes(kb.corpus_load.state)
+                        ? `Hugging Face load ${kb.corpus_load.state}: ${kb.corpus_load.message ?? ''}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' — ')
               }
               badge={
                 !kb.available ? (
                   <StatusBadge tone="danger">Unavailable</StatusBadge>
+                ) : kb.corpus_load?.state === 'running' ? (
+                  <StatusBadge tone="accent">Loading</StatusBadge>
+                ) : kb.corpus_load?.state === 'failed' && !kb.documents_indexed ? (
+                  <StatusBadge tone="danger">Load failed</StatusBadge>
                 ) : kb.documents_indexed ? (
                   <StatusBadge tone="ok">Indexed</StatusBadge>
                 ) : (
@@ -212,7 +226,7 @@ export function SystemStatus() {
               label="Advocate directory"
               value={
                 dir.available
-                  ? `${dir.verified_advocates ?? 0} verified advocate${dir.verified_advocates === 1 ? '' : 's'}`
+                  ? `${dir.verified_advocates ?? 0} listed advocate${dir.verified_advocates === 1 ? '' : 's'}${dir.sample_advocates ? ` (${dir.sample_advocates} are synthetic sample listings)` : ''}`
                   : 'Could not read the directory.'
               }
               badge={

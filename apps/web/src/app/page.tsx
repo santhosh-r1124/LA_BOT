@@ -7,7 +7,7 @@ const TOOLS = [
   {
     href: '/chat',
     title: 'Legal chat',
-    body: "Ask about Indian law in plain language. Answers cite indexed official sources where they match, and are labelled general information where they don't.",
+    body: 'Ask about Indian law in plain language. Answers cite indexed legal documents (court judgments, official texts) when one is relevant, and say so plainly when none is.',
     cta: 'Ask a question',
   },
   {
@@ -19,7 +19,7 @@ const TOOLS = [
   {
     href: '/advocates',
     title: 'Advocate directory',
-    body: 'Find verified advocates by practice area, state, city and language when a matter needs a professional.',
+    body: 'Find advocates by practice area, state, city and language when a matter needs a professional. Sample listings are clearly marked.',
     cta: 'Browse advocates',
   },
 ];
@@ -42,7 +42,7 @@ export default function HomePage() {
           </h1>
           <p className="muted max-w-xl">
             Plain-language answers about Indian law, document drafting guidance, and a route to
-            verified advocates for matters that need professional help.
+            advocates for matters that need professional help.
           </p>
           <div className="flex flex-wrap gap-2">
             <Link href="/chat" className="btn btn-primary">

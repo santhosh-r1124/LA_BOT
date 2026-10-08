@@ -297,10 +297,10 @@ export default function ChatPage() {
               {statusState.kind === 'error' && 'Knowledge base status unavailable.'}
               {status &&
                 (status.knowledge_base.documents_indexed
-                  ? `Answers cite ${status.knowledge_base.documents_indexed} indexed official source${status.knowledge_base.documents_indexed === 1 ? '' : 's'} where they match.`
+                  ? `Answers cite the ${status.knowledge_base.documents_indexed} indexed legal document${status.knowledge_base.documents_indexed === 1 ? '' : 's'} when one is relevant, and say so when none is.`
                   : generalAnswers
                     ? 'General information about Indian law, in plain language.'
-                    : 'Answers are grounded only in indexed official sources.')}
+                    : 'Answers are grounded only in indexed legal documents.')}
             </p>
           </div>
           <div className="flex gap-2 lg:hidden">
@@ -336,11 +336,16 @@ export default function ChatPage() {
         {!llmMissing && kbEmpty && (
           <div className="alert alert-warn mb-4" role="status">
             <div>
-              <p className="font-semibold">No official legal sources have been indexed yet.</p>
+              <p className="font-semibold">No legal documents have been indexed yet.</p>
               <p className="muted mt-0.5 text-sm">
+                {status?.knowledge_base.corpus_load?.state === 'running'
+                  ? `${status.knowledge_base.corpus_load.message ?? 'Court judgments are being loaded.'} `
+                  : status?.knowledge_base.corpus_load?.state === 'failed'
+                    ? `Loading court judgments failed: ${status.knowledge_base.corpus_load.message ?? 'unknown error'} `
+                    : ''}
                 {generalAnswers
-                  ? 'Answers are general information from the AI model, not quotes from official texts. Verify anything important on India Code or with an advocate.'
-                  : "Rather than guess, the assistant will say it doesn't have enough verified information until official sources are loaded."}
+                  ? 'Until then, answers are general information from the AI model, not drawn from any legal document. Verify anything important on India Code or with an advocate.'
+                  : "Rather than guess, the assistant will say it doesn't have enough verified information until documents are loaded."}
               </p>
             </div>
           </div>
@@ -382,7 +387,9 @@ export default function ChatPage() {
                       <AssistantMessage
                         id={m.id}
                         text={m.content}
-                        general={generalAnswers && Array.isArray(m.sources) && m.sources.length === 0}
+                        general={
+                          generalAnswers && Array.isArray(m.sources) && m.sources.length === 0
+                        }
                         sources={m.sources ?? null}
                         category={
                           prev?.role === 'user' && !prev.is_out_of_scope
@@ -432,7 +439,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        <div className="surface sticky bottom-3 mt-4 bg-elevated/95 p-2">
+        <div className="surface bg-elevated/95 sticky bottom-3 mt-4 p-2">
           <label htmlFor="chat-input" className="sr-only">
             Ask a legal question
           </label>
@@ -536,7 +543,7 @@ function AssistantMessage({
 
       {general && text && !pending && (
         <p className="subtle border-line mt-4 border-t pt-3 text-xs leading-relaxed">
-          Not drawn from the platform&apos;s indexed official sources. Check important details
+          Not drawn from any document in the platform&apos;s legal library. Check important details
           against the official text on{' '}
           <a
             href="https://www.indiacode.nic.in/"
@@ -557,12 +564,25 @@ function AssistantMessage({
             {sources.map((s, i) => (
               <li key={`${s.document_id}-${i}`} id={`${prefix}-${i + 1}`} className="flex gap-2">
                 <span className="cite shrink-0">{i + 1}</span>
-                <a href={s.source_url} target="_blank" rel="noreferrer noopener" className="link">
-                  {s.document_title}
-                  {s.section ? `, Section ${s.section}` : ''}
-                  {s.article ? `, Article ${s.article}` : ''}
-                  <span className="sr-only"> (opens official source in a new tab)</span>
-                </a>
+                <span className="flex flex-col">
+                  <a href={s.source_url} target="_blank" rel="noreferrer noopener" className="link">
+                    {s.document_title}
+                    {s.section ? `, Section ${s.section}` : ''}
+                    {s.article ? `, Article ${s.article}` : ''}
+                    <span className="sr-only"> (opens the source in a new tab)</span>
+                  </a>
+                  {(s.court || s.date || s.citation || s.dataset) && (
+                    <span className="subtle text-xs">
+                      {[s.court, s.date, s.citation].filter(Boolean).join(' · ')}
+                      {s.dataset && (
+                        <>
+                          {s.court || s.date || s.citation ? ' · ' : ''}
+                          Hugging Face dataset {s.dataset}
+                        </>
+                      )}
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ol>
