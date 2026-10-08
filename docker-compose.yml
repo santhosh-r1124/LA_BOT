@@ -2,7 +2,8 @@
 #
 #   docker compose up --build
 #
-# Website: http://localhost:8080   API docs: http://localhost:8080/docs
+# Website: http://localhost:3000
+# API:     http://localhost:8000  (docs: http://localhost:8000/docs)
 # Put your AI key in a file named .env next to this file:
 #   GEMINI_API_KEY=your-key-from-aistudio.google.com
 # Local admin (CSV upload at /advocates/import): admin@labot.local / admin12345
@@ -41,9 +42,11 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - '127.0.0.1:${APP_PORT:-8080}:8080'
+      - '127.0.0.1:${WEB_PORT:-3000}:8080'
+      - '127.0.0.1:${API_PORT:-8000}:18000'
     environment:
       PORT: '8080'
+      API_HOST: 0.0.0.0
       APP_ENV: development
       LOG_FORMAT: console
       DATABASE_URL: postgresql://labot:labot@db:5432/labot

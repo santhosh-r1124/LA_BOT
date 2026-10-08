@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Starts the whole app in one container (see the repo-root Dockerfile):
-#   API  (FastAPI/uvicorn) on 127.0.0.1:$API_PORT, internal only
+#   API  (FastAPI/uvicorn) on $API_HOST:$API_PORT (127.0.0.1 = internal only)
 #   web  (Next.js)         on 0.0.0.0:$PORT, proxies /api/v1 and /health to the API
 # Exits as soon as either process stops, so the platform restarts the container.
 set -uo pipefail
 
 PORT="${PORT:-8080}"
 API_PORT=18000
+# 0.0.0.0 lets docker-compose publish the API directly (localhost:8000).
+API_HOST="${API_HOST:-127.0.0.1}"
 
 cd /app/apps/api
 alembic upgrade head || exit 1
 
-uvicorn app.main:app --host 127.0.0.1 --port "$API_PORT" \
+uvicorn app.main:app --host "$API_HOST" --port "$API_PORT" \
   --proxy-headers --forwarded-allow-ips='*' &
 api=$!
 
