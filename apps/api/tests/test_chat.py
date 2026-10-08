@@ -145,7 +145,9 @@ async def test_anonymous_user_can_chat(
             "court": None,
             "date": None,
             "citation": None,
+            "case_name": None,
             "dataset": None,
+            "excerpt": FAKE_CHUNK.content,
         }
     ]
     assert body["disclaimer"]
@@ -529,6 +531,7 @@ async def test_status_reports_real_counts_and_no_secrets(db_client: AsyncClient)
         "provider": None,
         "model": None,
         "is_free_tier": None,
+        "fallback_provider": None,
         "last_call_ok": None,
         "last_call_at": None,
         "last_error_code": None,
@@ -574,3 +577,14 @@ async def test_check_llm_reports_success(
     assert body["ok"] is True
     assert body["provider"] == "gemini"
     assert body["latency_ms"] is not None
+
+
+async def test_status_reports_live_dependencies(db_client: AsyncClient) -> None:
+    body = (await db_client.get("/api/v1/status")).json()
+    deps = body["dependencies"]
+    assert deps["database"]["ok"] is True
+    assert deps["vector_search"]["ok"] is True  # pgvector is installed in CI/dev
+    assert "embedded" in deps["vector_search"]["detail"]
+    assert deps["redis"]["ok"] in (True, False)
+    assert body["embeddings"]["provider"] == "gemini"
+    assert "key" not in str(body).lower().replace("keyword", "")

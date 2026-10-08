@@ -760,12 +760,7 @@ def _is_configured(name: str, settings: Settings) -> bool:
     )
 
 
-def get_provider(settings: Settings) -> LLMProvider:
-    """Build the configured provider, or raise ``llm_not_configured`` (503)."""
-    name = _resolve_name(settings)
-    if name is None or not _is_configured(name, settings):
-        raise ServiceUnavailableError(_missing_config_message(name), code="llm_not_configured")
-
+def _build(name: str, settings: Settings) -> LLMProvider:
     timeout = settings.llm_request_timeout_seconds
     if name == "gemini":
         assert settings.gemini_api_key is not None
@@ -792,3 +787,119 @@ def get_provider(settings: Settings) -> LLMProvider:
             timeout_seconds=timeout,
         )
     return AnthropicProvider(settings=settings)
+
+
+def resolve_fallback_name(primary: str, settings: Settings) -> str | None:
+    """The secondary provider's name, or None. Only configured providers
+    qualify; ``auto`` never picks a paid (anthropic) or local (ollama) one."""
+    wanted = settings.llm_fallback_provider
+    if wanted == "none":
+        return None
+    candidates = ("gemini", "groq") if wanted == "auto" else (wanted,)
+    for name in candidates:
+        if name != primary and _is_configured(name, settings):
+            return name
+    return None
+
+
+class FallbackProvider:
+    """Primary provider with a secondary behind it.
+
+    A request goes to the primary; if it raises ``ServiceUnavailableError``
+    (quota, outage, bad key, timeout) the same request is retried once on the
+    secondary. A stream only falls back before its first token — a half-sent
+    answer is never stitched together from two models. If both fail, the
+    primary's error is raised (it's the one an operator configured first).
+    """
+
+    def __init__(self, primary: LLMProvider, secondary: LLMProvider) -> None:
+        self._primary = primary
+        self._secondary = secondary
+        self.name = primary.name
+        self.model = primary.model
+
+    def _switched(self, exc: ServiceUnavailableError, operation: str) -> None:
+        logger.warning(
+            "llm_fallback",
+            primary=self._primary.name,
+            secondary=self._secondary.name,
+            operation=operation,
+            code=exc.code,
+        )
+
+    async def complete(self, *, system: str, messages: Sequence[ChatTurn], max_tokens: int) -> str:
+        try:
+            return await self._primary.complete(
+                system=system, messages=messages, max_tokens=max_tokens
+            )
+        except ServiceUnavailableError as exc:
+            self._switched(exc, "complete")
+            try:
+                return await self._secondary.complete(
+                    system=system, messages=messages, max_tokens=max_tokens
+                )
+            except ServiceUnavailableError:
+                raise exc from None
+
+    async def stream(
+        self, *, system: str, messages: Sequence[ChatTurn], max_tokens: int
+    ) -> AsyncIterator[str]:
+        started = False
+        try:
+            async for delta in self._primary.stream(
+                system=system, messages=messages, max_tokens=max_tokens
+            ):
+                started = True
+                yield delta
+            return
+        except ServiceUnavailableError as exc:
+            if started:
+                raise
+            self._switched(exc, "stream")
+            first_error = exc
+        try:
+            async for delta in self._secondary.stream(
+                system=system, messages=messages, max_tokens=max_tokens
+            ):
+                yield delta
+        except ServiceUnavailableError:
+            raise first_error from None
+
+    async def complete_json(
+        self,
+        *,
+        system: str,
+        message: str,
+        schema: dict[str, Any],
+        schema_name: str,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "system": system,
+            "message": message,
+            "schema": schema,
+            "schema_name": schema_name,
+            "max_tokens": max_tokens,
+        }
+        try:
+            return await self._primary.complete_json(**kwargs)
+        except ServiceUnavailableError as exc:
+            self._switched(exc, "complete_json")
+            try:
+                return await self._secondary.complete_json(**kwargs)
+            except ServiceUnavailableError:
+                raise exc from None
+
+
+def get_provider(settings: Settings) -> LLMProvider:
+    """Build the configured provider (wrapped with a fallback when a second
+    one is configured), or raise ``llm_not_configured`` (503)."""
+    name = _resolve_name(settings)
+    if name is None or not _is_configured(name, settings):
+        raise ServiceUnavailableError(_missing_config_message(name), code="llm_not_configured")
+
+    primary = _build(name, settings)
+    fallback_name = resolve_fallback_name(name, settings)
+    if fallback_name is None:
+        return primary
+    return FallbackProvider(primary, _build(fallback_name, settings))

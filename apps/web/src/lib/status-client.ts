@@ -11,13 +11,15 @@ export interface PlatformStatus {
     provider: string | null;
     model: string | null;
     is_free_tier: boolean | null;
+    /** Secondary provider used if the primary fails; null = none. */
+    fallback_provider?: string | null;
     /** Outcome of the most recent real model call; null until the first one. */
     last_call_ok: boolean | null;
     last_call_at: string | null;
     last_error_code: string | null;
     last_error_message: string | null;
   };
-  embeddings: { configured: boolean; model: string | null };
+  embeddings: { configured: boolean; model: string | null; provider?: string };
   knowledge_base: {
     available: boolean;
     documents_indexed: number | null;
@@ -44,6 +46,12 @@ export interface PlatformStatus {
   };
   /** Server feature switches (absent on older API versions). */
   features?: { open_login: boolean; general_answers: boolean };
+  /** Live dependency checks (absent on older API versions). */
+  dependencies?: {
+    database: { ok: boolean | null; detail: string | null };
+    redis: { ok: boolean | null; detail: string | null };
+    vector_search: { ok: boolean | null; detail: string | null };
+  };
 }
 
 /** Mirrors `POST /api/v1/status/check-llm`. */

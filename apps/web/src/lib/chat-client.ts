@@ -12,8 +12,26 @@ export interface SourceOut {
   court?: string | null;
   date?: string | null;
   citation?: string | null;
+  case_name?: string | null;
   /** Hugging Face dataset id the document came from. */
   dataset?: string | null;
+  /** Opening of the retrieved passage, for in-chat inspection. */
+  excerpt?: string | null;
+}
+
+/** A verified directory advocate suggested for a HIGH/CRITICAL question. */
+export interface RecommendedAdvocate {
+  id: string;
+  display_name: string | null;
+  practice_areas: string[];
+  state_code: string;
+  city: string;
+  experience_years: number | null;
+  /** The practice area that matched (the question's own, or a related one). */
+  matched_area: string;
+  exact_match: boolean;
+  same_state: boolean;
+  is_sample: boolean;
 }
 
 export interface ChatMessageOut {
@@ -38,6 +56,7 @@ export interface SendMessageResponse {
   user_message: ChatMessageOut;
   assistant_message: ChatMessageOut;
   disclaimer: string;
+  recommended_advocates?: RecommendedAdvocate[];
 }
 
 export interface ConversationSummary {
@@ -61,6 +80,7 @@ export interface StreamStart {
   risk_level: ChatMessageOut['risk_level'];
   is_out_of_scope: boolean;
   sources: SourceOut[] | null;
+  recommended_advocates?: RecommendedAdvocate[];
 }
 
 export interface StreamHandlers {

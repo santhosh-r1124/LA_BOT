@@ -26,7 +26,26 @@ class SourceOut(BaseModel):
     court: str | None = None
     date: str | None = None
     citation: str | None = None
+    case_name: str | None = None
     dataset: str | None = None
+    # Opening of the retrieved passage, so the user can inspect what the
+    # answer was actually based on without leaving the chat.
+    excerpt: str | None = None
+
+
+class RecommendedAdvocate(BaseModel):
+    """A verified directory advocate suggested for a HIGH/CRITICAL question."""
+
+    id: uuid.UUID
+    display_name: str | None
+    practice_areas: list[str]
+    state_code: str
+    city: str
+    experience_years: int | None
+    matched_area: str
+    exact_match: bool
+    same_state: bool
+    is_sample: bool = False
 
 
 class ChatMessageOut(BaseModel):
@@ -50,6 +69,8 @@ class SendMessageResponse(BaseModel):
     user_message: ChatMessageOut
     assistant_message: ChatMessageOut
     disclaimer: str
+    # Filled for HIGH/CRITICAL risk questions; empty otherwise.
+    recommended_advocates: list[RecommendedAdvocate] = Field(default_factory=list)
 
 
 class ConversationSummary(BaseModel):

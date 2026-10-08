@@ -390,6 +390,25 @@ async def test_parquet_ingestion_is_incremental_and_idempotent(
         assert embedded == 0
 
 
+async def test_identical_text_under_new_ids_is_stored_once(
+    sessions: Callable[[], AsyncSession],
+) -> None:
+    data = rows(3)
+    data.append({**data[0], "id": "case-copy", "case_title": "Same judgment, re-listed"})
+    hub = FakeHub(files={"data/train.parquet": parquet_bytes(data)})
+    async with make_client(hub) as client:
+        _, report = await hf_dataset.ingest_dataset(
+            settings=get_settings(),
+            session_factory=sessions,
+            client=client,
+            name=hub.name,
+            max_documents=10,
+            batch_size=2,
+        )
+    assert (report.added, report.duplicates) == (3, 1)
+    assert (await _count(sessions, hub.name))[0] == 3
+
+
 async def test_viewer_ingestion_refetches_truncated_rows(
     sessions: Callable[[], AsyncSession],
 ) -> None:

@@ -510,3 +510,108 @@ async def test_gemini_complete_json_retries_without_schema_on_unclassified_error
     )
     assert data == {"category": "IP_LAW"}
     assert models.calls == [("gemini-3.5-flash", True), ("gemini-3.5-flash", False)]
+
+
+# ---------------------------------------------------------------------------
+# Cross-provider fallback (Gemini <-> Groq)
+# ---------------------------------------------------------------------------
+
+
+class _StubProvider:
+    def __init__(self, name: str, *, fail: str | None = None, text: str = "ok") -> None:
+        self.name = name
+        self.model = f"{name}-model"
+        self._fail = fail
+        self._text = text
+        self.calls = 0
+
+    def _maybe_fail(self) -> None:
+        self.calls += 1
+        if self._fail:
+            raise ServiceUnavailableError("down", code=self._fail)
+
+    async def complete(self, *, system: str, messages: Any, max_tokens: int) -> str:
+        self._maybe_fail()
+        return self._text
+
+    async def stream(self, *, system: str, messages: Any, max_tokens: int) -> Any:
+        self._maybe_fail()
+        for part in self._text.split():
+            yield part
+
+    async def complete_json(self, **_: Any) -> dict[str, Any]:
+        self._maybe_fail()
+        return {"from": self.name}
+
+
+def _fb(primary: _StubProvider, secondary: _StubProvider) -> llm_provider.FallbackProvider:
+    return llm_provider.FallbackProvider(primary, secondary)  # type: ignore[arg-type]
+
+
+def test_both_keys_wrap_primary_with_the_other_as_fallback() -> None:
+    provider = get_provider(_settings(gemini_api_key="k", groq_api_key="g"))
+    assert isinstance(provider, llm_provider.FallbackProvider)
+    assert provider.name == "gemini"
+    provider = get_provider(_settings(llm_provider="groq", gemini_api_key="k", groq_api_key="g"))
+    assert isinstance(provider, llm_provider.FallbackProvider)
+    assert provider.name == "groq"
+
+
+def test_single_key_or_fallback_none_has_no_wrapper() -> None:
+    assert not isinstance(
+        get_provider(_settings(gemini_api_key="k")), llm_provider.FallbackProvider
+    )
+    both = _settings(gemini_api_key="k", groq_api_key="g", llm_fallback_provider="none")
+    assert not isinstance(get_provider(both), llm_provider.FallbackProvider)
+
+
+def test_auto_fallback_never_picks_paid_provider() -> None:
+    settings = _settings(gemini_api_key="k", anthropic_api_key="a")
+    assert not isinstance(get_provider(settings), llm_provider.FallbackProvider)
+
+
+async def test_complete_falls_back_when_primary_fails() -> None:
+    primary = _StubProvider("gemini", fail="llm_rate_limited")
+    secondary = _StubProvider("groq", text="from groq")
+    result = await _fb(primary, secondary).complete(system="s", messages=[], max_tokens=10)
+    assert result == "from groq"
+    assert (primary.calls, secondary.calls) == (1, 1)
+
+
+async def test_complete_does_not_touch_secondary_when_primary_works() -> None:
+    primary, secondary = _StubProvider("gemini"), _StubProvider("groq")
+    assert await _fb(primary, secondary).complete(system="s", messages=[], max_tokens=1) == "ok"
+    assert secondary.calls == 0
+
+
+async def test_both_failing_raises_the_primary_error() -> None:
+    primary = _StubProvider("gemini", fail="llm_rate_limited")
+    secondary = _StubProvider("groq", fail="llm_timeout")
+    with pytest.raises(ServiceUnavailableError) as exc_info:
+        await _fb(primary, secondary).complete(system="s", messages=[], max_tokens=1)
+    assert exc_info.value.code == "llm_rate_limited"
+
+
+async def test_stream_and_json_fall_back() -> None:
+    primary = _StubProvider("gemini", fail="llm_error")
+    secondary = _StubProvider("groq", text="a b")
+    fb = _fb(primary, secondary)
+    assert [d async for d in fb.stream(system="s", messages=[], max_tokens=1)] == ["a", "b"]
+    data = await fb.complete_json(system="s", message="m", schema={}, schema_name="n", max_tokens=1)
+    assert data == {"from": "groq"}
+
+
+async def test_stream_that_already_started_does_not_switch_models() -> None:
+    class _Dies(_StubProvider):
+        async def stream(self, *, system: str, messages: Any, max_tokens: int) -> Any:
+            yield "partial"
+            raise ServiceUnavailableError("cut", code="llm_error")
+
+    secondary = _StubProvider("groq")
+    fb = _fb(_Dies("gemini"), secondary)
+    received: list[str] = []
+    with pytest.raises(ServiceUnavailableError):
+        async for delta in fb.stream(system="s", messages=[], max_tokens=1):
+            received.append(delta)
+    assert received == ["partial"]
+    assert secondary.calls == 0

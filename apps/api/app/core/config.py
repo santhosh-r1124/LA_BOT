@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     #   ollama    -> local open-source model, no key, no cost
     #   anthropic -> Claude (paid; optional)
     llm_provider: Literal["auto", "gemini", "groq", "ollama", "anthropic"] = "auto"
+    # Secondary provider tried when the primary fails (quota, outage, bad key).
+    #   auto -> the other of gemini/groq if its key is set (never a paid or
+    #           local provider implicitly)
+    #   none -> never fall back
+    #   <name> -> that provider, if configured
+    llm_fallback_provider: Literal["auto", "none", "gemini", "groq", "ollama", "anthropic"] = "auto"
     llm_max_tokens: int = 1024
     llm_classifier_max_tokens: int = 300
     llm_request_timeout_seconds: float = 60.0
@@ -147,6 +153,10 @@ class Settings(BaseSettings):
     # over paid embedding providers (Voyage/OpenAI) to keep the platform
     # runnable at zero cost; swap providers later by re-embedding.
     gemini_api_key: str | None = None
+    # gemini -> Google embeddings (needs GEMINI_API_KEY); none -> keyword-only
+    # retrieval (no embedding calls, vectors left empty). Groq has no
+    # embeddings API, so Gemini is the only vector provider.
+    embedding_provider: Literal["gemini", "none"] = "gemini"
     embedding_model: str = "gemini-embedding-001"
     # gemini-embedding-001 supports Matryoshka truncation down from 3072;
     # 768 is Google's recommended efficiency/quality tradeoff point. Changing

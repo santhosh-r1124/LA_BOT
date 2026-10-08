@@ -24,6 +24,9 @@
     "db:migrate": "cd apps/api && uv run alembic upgrade head",
     "db:revision": "cd apps/api && uv run alembic revision --autogenerate -m",
     "kb:seed": "cd apps/api && uv run python -m app.scripts.seed_corpus",
+    "seed:legal": "cd apps/api && uv run python -m app.scripts.ingest_hf_dataset && uv run python -m app.scripts.ingest_hf_dataset --embed-missing",
+    "kb:inspect": "cd apps/api && uv run python -m app.scripts.ingest_hf_dataset --inspect",
+    "seed:advocates": "cd apps/api && uv run python -m app.scripts.import_advocates data/advocates.csv",
     "api:dev": "cd apps/api && uv run uvicorn app.main:app --reload --port 8000"
   },
   "devDependencies": {

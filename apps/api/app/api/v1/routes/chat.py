@@ -34,11 +34,13 @@ from app.schemas.chat import (
     ChatMessageOut,
     ConversationDetail,
     ConversationSummary,
+    RecommendedAdvocate,
     SendMessageRequest,
     SendMessageResponse,
 )
 from app.services import legal_classifier, risk_engine
 from app.services import llm as llm_service
+from app.services.advocate_recommendation import recommend_advocates
 from app.services.rag import retrieval as retrieval_service
 from app.services.rag.retrieval import RetrievedChunk
 from app.services.rate_limit import AIRateLimit
@@ -91,10 +93,61 @@ def _source_dict(chunk: RetrievedChunk) -> dict[str, object]:
         "article": chunk.article,
         "source_url": chunk.source_url,
     }
-    for key in ("court", "date", "citation", "dataset"):
+    for key in ("court", "date", "citation", "case_name", "dataset"):
         if chunk.metadata.get(key):
             source[key] = str(chunk.metadata[key])
+    source["excerpt"] = _excerpt(chunk.content)
     return source
+
+
+_EXCERPT_CHARS = 600
+
+
+def _excerpt(content: str) -> str:
+    flat = " ".join(content.split())
+    if len(flat) <= _EXCERPT_CHARS:
+        return flat
+    return flat[:_EXCERPT_CHARS].rsplit(" ", 1)[0] + "…"
+
+
+async def _recommend(
+    classification: legal_classifier.Classification,
+    *,
+    user: User | None,
+    db: DbSession,
+) -> list[RecommendedAdvocate]:
+    """HIGH/CRITICAL in-scope questions -> matching verified advocates. A
+    directory problem must never break the chat answer itself."""
+    if classification.is_out_of_scope or not risk_engine.requires_advocate_recommendation(
+        classification.risk_level
+    ):
+        return []
+    try:
+        # A savepoint keeps a failed query from poisoning the chat transaction.
+        async with db.begin_nested():
+            found = await recommend_advocates(
+                db,
+                category=classification.category,
+                state_code=user.state_code if user else None,
+            )
+    except Exception as exc:
+        logger.warning("advocate_recommendation_failed", error_type=type(exc).__name__)
+        return []
+    return [
+        RecommendedAdvocate(
+            id=r.profile.id,
+            display_name=r.display_name,
+            practice_areas=r.profile.practice_areas,
+            state_code=r.profile.state_code,
+            city=r.profile.city,
+            experience_years=r.profile.experience_years,
+            matched_area=r.matched_area,
+            exact_match=r.exact_match,
+            same_state=r.same_state,
+            is_sample=r.profile.is_sample,
+        )
+        for r in found
+    ]
 
 
 @dataclass(slots=True)
@@ -110,6 +163,7 @@ class _PreparedTurn:
     # model generation is needed.
     fixed_answer: str | None
     sources: list[dict[str, object]] | None
+    recommended_advocates: list[RecommendedAdvocate]
 
     @property
     def advocate_suffix(self) -> str:
@@ -161,6 +215,10 @@ async def _prepare_turn(
         if not retrieved and not settings.allow_general_answers:
             fixed_answer = INSUFFICIENT_EVIDENCE_MESSAGE
 
+    # Chat history is rolled back on provider failure (see the stream route),
+    # but the directory read is side-effect free, so run it up front.
+    recommended = await _recommend(classification, user=user, db=db)
+
     return _PreparedTurn(
         conversation=conversation,
         user_message=user_message,
@@ -169,6 +227,7 @@ async def _prepare_turn(
         retrieved=retrieved,
         fixed_answer=fixed_answer,
         sources=sources,
+        recommended_advocates=recommended,
     )
 
 
@@ -192,6 +251,7 @@ async def _finalize_turn(
         user_message=ChatMessageOut.model_validate(turn.user_message),
         assistant_message=ChatMessageOut.model_validate(assistant_message),
         disclaimer=MANDATORY_DISCLAIMER,
+        recommended_advocates=turn.recommended_advocates,
     )
 
 
@@ -269,6 +329,9 @@ async def send_message_stream(
                 "risk_level": turn.classification.risk_level,
                 "is_out_of_scope": turn.classification.is_out_of_scope,
                 "sources": turn.sources,
+                "recommended_advocates": [
+                    a.model_dump(mode="json") for a in turn.recommended_advocates
+                ],
             },
         )
         if turn.fixed_answer is not None:

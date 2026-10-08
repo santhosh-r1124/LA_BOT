@@ -227,6 +227,18 @@ deliverable and builds on the previous one.
 
 Per-feature status: [project-status.md](project-status.md).
 
+## Current cycle: functional MVP (2026-10-08)
+
+The goal of this cycle is a working end-to-end product — register, ask an
+Indian legal question, get a RAG-grounded answer from Gemini or Groq (with
+automatic fallback between them), see inspectable citations and a risk level,
+and find a relevant advocate from the supplied CSV — rather than new phases.
+Phases 8–13 below are therefore **Future scope**: consultation booking,
+payments (refunds, invoices, earnings), the full advocate dashboard, SMS and
+production notifications, the full admin/legal-ops dashboard, and advanced
+compliance (stronger prompt-injection defence, audit logs, tenant isolation).
+A basic prompt-injection boundary around retrieved text already ships.
+
 ## MVP scope (Phase 16)
 
 Consumer Legal Chat · Legal Document Assistant · Advocate Search · Consultation

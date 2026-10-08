@@ -11,8 +11,10 @@ import {
   chatClient,
   type ChatMessageOut,
   type ConversationSummary,
+  type RecommendedAdvocate,
   type SourceOut,
 } from '@/lib/chat-client';
+import { formatEnumLabel, stateName } from '@/lib/format';
 import { usePlatformStatus } from '@/lib/status-client';
 
 const CONVERSATION_KEY = 'lp_chat_conversation_id';
@@ -37,6 +39,13 @@ const JURISDICTION_LABEL: Record<string, string> = {
   STAMP_DUTY: 'Stamp duty varies by state',
 };
 
+const RISK_TONE = {
+  LOW: 'ok',
+  MEDIUM: 'neutral',
+  HIGH: 'warn',
+  CRITICAL: 'danger',
+} as const;
+
 function titleCase(value: string): string {
   return value
     .split('_')
@@ -49,6 +58,8 @@ interface StreamingTurn {
   sources: SourceOut[] | null;
   category: string | null;
   jurisdiction: string | null;
+  risk: ChatMessageOut['risk_level'];
+  advocates: RecommendedAdvocate[];
 }
 
 function storageGet(key: string): string | null {
@@ -73,6 +84,9 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageOut[]>([]);
   const [input, setInput] = useState('');
+  const [advocatesByMessage, setAdvocatesByMessage] = useState<
+    Record<string, RecommendedAdvocate[]>
+  >({});
   const [streaming, setStreaming] = useState<StreamingTurn | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ message: string; retryText?: string } | null>(null);
@@ -146,7 +160,14 @@ export default function ChatPage() {
         created_at: new Date().toISOString(),
       },
     ]);
-    setStreaming({ text: '', sources: null, category: null, jurisdiction: null });
+    setStreaming({
+      text: '',
+      sources: null,
+      category: null,
+      jurisdiction: null,
+      risk: null,
+      advocates: [],
+    });
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -159,12 +180,18 @@ export default function ChatPage() {
             sources: start.sources,
             category: start.is_out_of_scope ? null : start.legal_category,
             jurisdiction: start.jurisdiction_scope,
+            risk: start.is_out_of_scope ? null : start.risk_level,
+            advocates: start.recommended_advocates ?? [],
           })),
         onDelta: (delta) => setStreaming((s) => (s ? { ...s, text: s.text + delta } : s)),
       });
       setDisclaimer(res.disclaimer);
       setConversationId(res.conversation_id);
       storageSet(CONVERSATION_KEY, res.conversation_id);
+      setAdvocatesByMessage((prev) => ({
+        ...prev,
+        [res.assistant_message.id]: res.recommended_advocates ?? [],
+      }));
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== pendingId),
         res.user_message,
@@ -397,6 +424,10 @@ export default function ChatPage() {
                             : null
                         }
                         jurisdiction={prev?.role === 'user' ? prev.jurisdiction_scope : null}
+                        risk={
+                          prev?.role === 'user' && !prev.is_out_of_scope ? prev.risk_level : null
+                        }
+                        advocates={advocatesByMessage[m.id] ?? []}
                       />
                     )}
                   </li>
@@ -415,6 +446,8 @@ export default function ChatPage() {
                     sources={streaming.sources}
                     category={streaming.category}
                     jurisdiction={streaming.jurisdiction}
+                    risk={streaming.risk}
+                    advocates={streaming.advocates}
                     pending
                   />
                 </li>
@@ -501,6 +534,8 @@ function AssistantMessage({
   sources,
   category,
   jurisdiction,
+  risk,
+  advocates,
   pending = false,
 }: {
   id: string;
@@ -510,15 +545,18 @@ function AssistantMessage({
   sources: SourceOut[] | null;
   category: string | null;
   jurisdiction: string | null;
+  risk: ChatMessageOut['risk_level'];
+  advocates: RecommendedAdvocate[];
   pending?: boolean;
 }) {
   const prefix = `src-${id}`;
   const jurisdictionLabel = jurisdiction ? JURISDICTION_LABEL[jurisdiction] : undefined;
   return (
     <article className="surface-flat p-4 sm:p-5" aria-label="Assistant answer">
-      {(category || jurisdictionLabel || general) && (
+      {(category || jurisdictionLabel || general || risk) && (
         <div className="mb-3 flex flex-wrap gap-1.5">
           {category && <StatusBadge tone="accent">{titleCase(category)}</StatusBadge>}
+          {risk && <StatusBadge tone={RISK_TONE[risk]}>Risk: {titleCase(risk)}</StatusBadge>}
           {general && <StatusBadge tone="neutral">General information</StatusBadge>}
           {jurisdictionLabel && (
             <StatusBadge tone={jurisdiction === 'CENTRAL' ? 'neutral' : 'warn'}>
@@ -571,16 +609,26 @@ function AssistantMessage({
                     {s.article ? `, Article ${s.article}` : ''}
                     <span className="sr-only"> (opens the source in a new tab)</span>
                   </a>
-                  {(s.court || s.date || s.citation || s.dataset) && (
+                  {(s.case_name || s.court || s.date || s.citation || s.dataset) && (
                     <span className="subtle text-xs">
-                      {[s.court, s.date, s.citation].filter(Boolean).join(' · ')}
+                      {[s.case_name, s.court, s.date, s.citation].filter(Boolean).join(' · ')}
                       {s.dataset && (
                         <>
-                          {s.court || s.date || s.citation ? ' · ' : ''}
+                          {s.case_name || s.court || s.date || s.citation ? ' · ' : ''}
                           Hugging Face dataset {s.dataset}
                         </>
                       )}
                     </span>
+                  )}
+                  {s.excerpt && (
+                    <details className="mt-1">
+                      <summary className="link cursor-pointer text-xs">
+                        View the passage used
+                      </summary>
+                      <blockquote className="border-line subtle mt-1 border-l-2 pl-3 text-xs leading-relaxed">
+                        {s.excerpt}
+                      </blockquote>
+                    </details>
                   )}
                 </span>
               </li>
@@ -588,6 +636,60 @@ function AssistantMessage({
           </ol>
         </div>
       )}
+
+      {(risk === 'HIGH' || risk === 'CRITICAL') && !pending && (
+        <AdvocateCta category={category} advocates={advocates} />
+      )}
     </article>
+  );
+}
+
+function AdvocateCta({
+  category,
+  advocates,
+}: {
+  category: string | null;
+  advocates: RecommendedAdvocate[];
+}) {
+  const href = category ? `/advocates?practice_area=${encodeURIComponent(category)}` : '/advocates';
+  return (
+    <section
+      aria-label="Advocate recommendation"
+      className="border-line mt-4 rounded-lg border p-3 sm:p-4"
+    >
+      <p className="text-sm font-semibold">
+        This matter may require professional legal assistance.
+      </p>
+      {advocates.length > 0 ? (
+        <>
+          <p className="muted mt-0.5 text-xs">
+            Advocates in the directory who practise in this area
+            {advocates.some((a) => a.same_state) ? ', nearest your state first' : ''}:
+          </p>
+          <ul className="mt-2 flex flex-col gap-2">
+            {advocates.map((a) => (
+              <li key={a.id} className="text-sm">
+                <Link href={`/advocates/${a.id}`} className="link font-medium">
+                  {a.display_name ?? 'Advocate'}
+                </Link>
+                <span className="subtle text-xs">
+                  {' '}
+                  · {formatEnumLabel(a.matched_area)} · {a.city}, {stateName(a.state_code)}
+                  {a.experience_years !== null ? ` · ${a.experience_years} yrs` : ''}
+                  {a.is_sample ? ' · sample listing' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="muted mt-0.5 text-xs">
+          No listed advocate matched this area yet; you can still browse the directory.
+        </p>
+      )}
+      <Link href={href} className="btn btn-primary mt-3 inline-flex text-sm">
+        Find an Advocate
+      </Link>
+    </section>
   );
 }
