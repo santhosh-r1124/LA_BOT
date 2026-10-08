@@ -193,19 +193,41 @@ async def search_advocates(
             problems.append(
                 {"field": "practice_area", "message": f"Unknown practice area {practice_area!r}."}
             )
-    if state_code and not _STATE_CODE.match(state_code):
+    if state_code and state_code != state_code.upper() and state_code.upper() in ALL_STATE_NAMES:
+        problems.append(
+            {
+                "field": "state",
+                "message": f"State codes are case-sensitive: use {state_code.upper()!r}, "
+                f"not {state_code!r}.",
+            }
+        )
+    elif state_code and not _STATE_CODE.match(state_code):
         problems.append(
             {
                 "field": "state",
                 "message": f"State codes are two upper-case letters (e.g. TN), got {state_code!r}.",
             }
         )
-    if language and not _LANGUAGE_CODE.match(language):
+    elif state_code and state_code not in ALL_STATE_NAMES:
+        problems.append({"field": "state", "message": f"Unknown state code {state_code!r}."})
+    if language and language != language.lower() and language.lower() in LANGUAGE_NAMES:
+        problems.append(
+            {
+                "field": "language_code",
+                "message": f"Language codes are case-sensitive: use {language.lower()!r}, "
+                f"not {language!r}.",
+            }
+        )
+    elif language and not _LANGUAGE_CODE.match(language):
         problems.append(
             {
                 "field": "language_code",
                 "message": f"Language codes are lower-case (e.g. ta), got {language!r}.",
             }
+        )
+    elif language and language not in LANGUAGE_NAMES:
+        problems.append(
+            {"field": "language_code", "message": f"Unknown language code {language!r}."}
         )
     if problems:
         raise ValidationAppError("Some search filters are invalid.", details=problems)

@@ -336,7 +336,9 @@ async def test_search_api_matches_exact_codes_and_accepts_aliases(
     [
         ({"state": "tn"}, "state"),
         ({"state": "Tamil Nadu"}, "state"),
+        ({"state": "ZZ"}, "state"),
         ({"language_code": "TA"}, "language_code"),
+        ({"language_code": "xx"}, "language_code"),
         ({"practice_area": "Astrology"}, "practice_area"),
     ],
 )
@@ -348,6 +350,16 @@ async def test_search_api_rejects_invalid_filters(
     body = resp.json()["error"]
     assert body["code"] == "validation_error"
     assert body["details"][0]["field"] == field
+
+
+async def test_search_api_names_the_right_case(db_client: AsyncClient) -> None:
+    resp = await db_client.get("/api/v1/advocates", params={"state": "tn", "language_code": "TA"})
+    assert resp.status_code == 422
+    messages = [d["message"] for d in resp.json()["error"]["details"]]
+    assert messages == [
+        "State codes are case-sensitive: use 'TN', not 'tn'.",
+        "Language codes are case-sensitive: use 'ta', not 'TA'.",
+    ]
 
 
 async def test_city_filter_treats_wildcards_literally(

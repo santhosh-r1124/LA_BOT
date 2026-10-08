@@ -14,13 +14,134 @@ routes users to a qualified advocate rather than acting as one.
 > document-drafting assistant, and advocate marketplace discovery.
 > **Runs entirely on free services**: one free Google AI Studio key (or a
 > local Ollama model) — see [`docs/api-inventory.md`](docs/api-inventory.md).
-> Load the official legal corpus with `pnpm kb:seed`; until then chat
-> correctly answers "insufficient verified information".
+> Real Indian court judgments are loaded from a Hugging Face dataset on
+> start (see [Legal knowledge base](#legal-knowledge-base-hugging-face)); when
+> nothing relevant is retrieved, chat says so before giving general
+> information.
 >
 > Status per feature (based on the code, not the UI):
 > [`docs/project-status.md`](docs/project-status.md) · phase plan:
 > [`docs/roadmap.md`](docs/roadmap.md) · design:
 > [`docs/architecture.md`](docs/architecture.md).
+
+---
+
+## Run it on your computer
+
+**Windows, easiest:** install [Docker Desktop](https://www.docker.com/products/docker-desktop/),
+then double-click **`START-LA-BOT.bat`**. It checks Docker, asks once for a
+free Gemini key (optional), frees port 3000 if another app holds it (or picks
+another port), builds and starts everything, and opens the browser. It fixes
+common problems itself (pnpm version mismatch, CRLF/UTF-16 `.env`, a crashed
+database). `STOP-LA-BOT.bat` stops it.
+
+**Any OS, by hand:**
+
+```bash
+# 1. Install
+pnpm install                        # JS workspace (pnpm 10; corepack enable)
+cd apps/api && uv sync && cd ../..  # Python API (uv)
+
+# 2. Configure: copy the example and fill in only what you need
+cp .env.example .env                # GEMINI_API_KEY=... (free) enables the AI
+                                    # HF_TOKEN=... only for gated datasets
+
+# 3. Start backend + frontend (Postgres, Redis, API, web) on http://localhost:3000
+docker compose up -d --build        # WEB_PORT=3020 docker compose up -d  if 3000 is taken
+
+# 4. Import advocates (also runs automatically on every start)
+docker compose exec -w /app/apps/api app python -m app.scripts.import_advocates data/advocates.csv --sample --expect 1000
+
+# 5. Load real legal data from Hugging Face (also runs in the background on start)
+docker compose exec -w /app/apps/api app python -m app.scripts.ingest_hf_dataset --inspect      # look first
+docker compose exec -w /app/apps/api app python -m app.scripts.ingest_hf_dataset                # HF_MAX_DOCUMENTS docs
+docker compose exec -w /app/apps/api app python -m app.scripts.ingest_hf_dataset --embed-missing  # needs GEMINI_API_KEY
+
+# 6. Tests
+cd apps/api && uv run pytest        # backend (needs Postgres: see conftest.py)
+pnpm test                           # frontend + shared
+python infrastructure/local/e2e_api_checks.py http://localhost:3000   # against the running app
+```
+
+Without Docker: run Postgres (with pgvector) and Redis yourself, then
+`cd apps/api && uv run alembic upgrade head && uv run uvicorn app.main:app --port 8000`
+and `pnpm --filter @legal-platform/web dev`. The same `uv run python -m app.scripts...`
+commands work from `apps/api`.
+
+### Architecture
+
+```
+ Browser ──► Next.js web (:3000) ──/api/v1 proxy──► FastAPI (:18000 in the container, :8000 on the host)
+                                                      │
+          ┌───────────────────────────────────────────┼─────────────────────────────┐
+          │ Advocate directory                         │ Legal chat (RAG)             │
+          │  advocates.csv ─► import (validate, upsert │  question ─► classifier      │
+          │  by advocate_id, codes kept as written,    │   ─► hybrid retrieval:        │
+          │  is_sample) ─► advocate_profiles           │      keyword (Postgres FTS)   │
+          │  GET /advocates?practice_area&state&city   │      + vector (pgvector, when │
+          │      &language_code&page&page_size         │        chunks are embedded)   │
+          │  GET /advocates/facets                     │   ─► sources? grounded answer │
+          │                                            │      with [n] citations       │
+          │                                            │    : notice + general answer  │
+          │                                            │   ─► LLM (Gemini / Groq /     │
+          │                                            │      Ollama / Anthropic)      │
+          └────────────────────────────────────────────┴───────────────────────────────┘
+                                                      │
+ Hugging Face dataset ─► loader (viewer API pages, or parquet/JSONL via HTTP range
+   requests) ─► normalise ─► chunk ─► legal_documents + legal_chunks (Postgres)
+   ─► embeddings (Gemini, resumable) ─► pgvector          Redis: rate limits, query-embedding cache
+```
+
+The synthetic advocate CSV and the legal knowledge base are separate tables:
+advocate records never enter retrieval, and legal documents come only from the
+configured dataset (or `pnpm kb:seed` official texts), never from generated
+text.
+
+### Advocate directory
+
+`apps/api/data/advocates.csv` (1000 rows: `advocate_id, name, email, phone,
+practice_area, state, city, language_code`) is **synthetic demo data**. It is
+imported on every start with `is_sample=true`, so every listing carries a
+**Sample** badge and the profile page says it is not a real, verified advocate.
+
+- State codes (`TN`, `KA`, `TS`, `OD`, `CG`, ...) and language codes (`ta`,
+  `en`, `hi`, ...) are stored **exactly as written** and are case-sensitive: a
+  row with `tn` or `TA` is rejected with a reason instead of being rewritten.
+  ISO variants (`CT`, `TG`, `OR`, `UT`, `GA`) are accepted and kept as written.
+- Practice areas are the 14 platform categories (Cyber Law, Family Law, ...,
+  Document Guidance, Advocate Required); names and codes are both accepted.
+- Re-importing is idempotent (upsert by `advocate_id`); duplicate ids or
+  emails inside one file, missing columns and malformed rows are reported.
+- Search: `GET /api/v1/advocates?practice_area=Cyber%20Law&state=TN&city=Chennai&language_code=ta&page=1&page_size=20`
+  returns `{items, total, page, page_size, limit, offset}`; invalid filters
+  return `422` with the failing field. Admins can upload more CSVs at
+  `/advocates/import`.
+
+### Legal knowledge base (Hugging Face)
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `HF_DATASET_NAME` | `Sumitedu/indian-case-laws` | Dataset id on huggingface.co |
+| `HF_DATASET_SPLIT` / `HF_DATASET_FILE` | empty | Viewer split, or one parquet/`.jsonl` file of the repo to read directly |
+| `HF_MAX_DOCUMENTS` | `200` | Documents to keep indexed; raise it to load more (continues where it stopped) |
+| `HF_BATCH_SIZE` | `20` | Rows per request |
+| `HF_TOKEN` | empty | Read token, only for gated/private datasets |
+| `LEGAL_CORPUS_AUTOLOAD` / `LEGAL_CORPUS_EMBED_ON_START` | `true` | Load / embed in the background on API start |
+
+Why this dataset, what was checked and what wasn't:
+[`docs/legal-dataset.md`](docs/legal-dataset.md). Nothing is downloaded whole;
+progress and failures (no internet, gated dataset, viewer unavailable) are
+shown on the home page's **Platform status** panel and in `GET /api/v1/status`.
+Retrieval works keyword-only until chunks are embedded, so a Gemini key is not
+required to get cited answers.
+
+**Answer rules:** answers cite only retrieved documents; case names, courts,
+dates and citations come from the dataset's own fields and are never inferred.
+When nothing relevant is retrieved, the reply starts with *"I couldn't find
+sufficiently relevant material in the legal library for this question, so this
+is general information only, not drawn from any source document."* Every reply
+carries the disclaimer that this is general information, not a substitute for
+an advocate.
 
 ---
 
@@ -110,8 +231,9 @@ admin sign-up): `cd apps/api && uv run python -m app.scripts.create_admin --emai
 2. Put it in `apps/api/.env` (and the root `.env` for Docker):
    `GEMINI_API_KEY=...` — it powers both the chat model and the knowledge-base
    embeddings. Nothing else is required.
-3. Load the official legal sources (India Code / Legislative Department /
-   MeitY — 15 Acts, takes a few minutes on the free tier):
+3. Court judgments from Hugging Face load on start (above). Optionally also
+   load the official Acts (India Code / Legislative Department / MeitY — 15
+   Acts, takes a few minutes on the free tier):
 
    ```bash
    pnpm kb:seed          # idempotent; add -- --retry-failed to retry failures
@@ -128,9 +250,9 @@ and failure mode is documented in
 [`docs/api-inventory.md`](docs/api-inventory.md).
 
 Without any provider configured, chat/documents return a clear
-`503 llm_not_configured` and the UI says so; without indexed sources, chat
-replies with the "insufficient verified information" message instead of
-guessing — see
+`503 llm_not_configured` and the UI says so; when no indexed source is
+relevant, chat says so first and labels the reply general information
+(`ALLOW_GENERAL_ANSWERS=false` refuses instead) — see
 [`docs/adr/0007-hybrid-search-and-grounding.md`](docs/adr/0007-hybrid-search-and-grounding.md)
 and [`docs/adr/0010-free-llm-providers-and-streaming.md`](docs/adr/0010-free-llm-providers-and-streaming.md).
 
@@ -160,6 +282,8 @@ on the host — see the comments in `.env.example`.
 | `pnpm db:migrate`             | Apply Alembic migrations                    |
 | `pnpm db:revision -- "msg"`   | Autogenerate a new migration                |
 | `pnpm kb:seed`                | Index the official Indian legal sources     |
+| `cd apps/api && uv run python -m app.scripts.ingest_hf_dataset` | Load court judgments from Hugging Face (`--inspect`, `--embed-missing`) |
+| `cd apps/api && uv run python -m app.scripts.import_advocates FILE.csv` | Import advocates (`--dry-run`, `--sample`, `--expect N`) |
 | `cd apps/api && uv run pytest`| Run backend tests                           |
 | `cd apps/api && uv run ruff check . && uv run mypy .` | Lint + type-check backend |
 

@@ -331,7 +331,11 @@ export default function AdvocatesPage() {
           <>
             <p className="muted mb-3 text-sm" data-testid="result-count">
               {total} advocate{total === 1 ? '' : 's'}
-              {hasFilters ? ' match your filters' : ' listed'}
+              {hasFilters
+                ? total === 1
+                  ? ' matches your filters'
+                  : ' match your filters'
+                : ' listed'}
               {loading && ' · updating…'}
             </p>
             <ul
