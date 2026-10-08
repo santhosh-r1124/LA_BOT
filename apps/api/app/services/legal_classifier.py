@@ -11,6 +11,10 @@ See docs/adr/0008-risk-scoring.md.
 `app.services.risk_engine` turns a `risk_level` into a product decision
 (does this reply need an advocate recommendation?); this module only
 classifies, it doesn't decide what to do with the classification.
+
+Offline mode: with no provider configured, or when the provider call fails,
+`classify_query` answers from `app.services.rules_classifier` (deterministic
+vocabulary matching, no model) instead of failing, so chat keeps working.
 """
 
 from __future__ import annotations

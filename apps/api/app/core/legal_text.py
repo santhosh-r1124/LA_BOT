@@ -57,5 +57,6 @@ OFFLINE_WELCOME_MESSAGE = (
     "server, so I reply by finding the passages in the legal library that match your "
     "question and showing them with their sources. Ask about a specific situation, for "
     "example unpaid salary, a security deposit, a bounced cheque or a defective "
-    "product. The advocate directory and the document assistant work as usual."
+    "product. The advocate directory is open, and the document assistant prepares "
+    "template drafts you can edit."
 )

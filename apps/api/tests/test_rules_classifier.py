@@ -118,6 +118,20 @@ CATEGORY_CASES: list[tuple[str, str, str]] = [
     ("Draft an NDA for my startup", "DOCUMENT_GUIDANCE", "MEDIUM"),
     ("What should a rental agreement include?", "DOCUMENT_GUIDANCE", "MEDIUM"),
     ("Format of an authorization letter", "DOCUMENT_GUIDANCE", "MEDIUM"),
+    # More everyday phrasings
+    (
+        "My father passed away without a will, how do we divide the property?",
+        "FAMILY_LAW",
+        "MEDIUM",
+    ),
+    ("Online shopping site did not deliver my order", "CONSUMER_LAW", "HIGH"),
+    ("Someone sent me a defamatory message on WhatsApp", "CRIMINAL_LAW", "HIGH"),
+    ("My bank is harassing me for loan recovery", "CONTRACT_LAW", "HIGH"),
+    ("My neighbour built a wall on my land", "PROPERTY_LAW", "HIGH"),
+    ("Is it legal to carry a knife for self defence?", "CRIMINAL_LAW", "LOW"),
+    ("Police ne mujhe thane bulaya hai", "CRIMINAL_LAW", "CRITICAL"),
+    ("How can I protect my startup idea?", "IP_LAW", "MEDIUM"),
+    ("How do I change my name legally?", "DOCUMENT_GUIDANCE", "MEDIUM"),
     # ADVOCATE_REQUIRED
     ("I received a legal notice from a vendor", "ADVOCATE_REQUIRED", "HIGH"),
     ("I need a lawyer", "ADVOCATE_REQUIRED", "HIGH"),
@@ -275,6 +289,9 @@ def test_registration_of_a_trademark_is_not_a_registration_authority_question() 
         "Help me with my maths homework",
         "Which is better, Python or JavaScript?",
         "Write a poem about the monsoon",
+        "Should I buy shares of Reliance?",
+        "Best places to visit in Goa",
+        "Give me tips for a job interview",
     ],
 )
 def test_clearly_non_legal_text_is_out_of_scope(message: str) -> None:

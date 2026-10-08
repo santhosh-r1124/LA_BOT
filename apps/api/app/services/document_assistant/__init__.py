@@ -5,6 +5,9 @@ No ``services/document-assistant`` stub exists from Phase 0 (unlike
 never anticipated this as its own service, so there's no prior commitment to
 reconcile. Logic lives directly in ``apps/api`` from the start, for the same
 Docker-build-context reason ``docs/adr/0004`` gives for the others.
+
+``generation`` drafts with the configured model; ``templates`` builds the
+deterministic template draft used when none is configured (offline mode).
 """
 
 from __future__ import annotations
