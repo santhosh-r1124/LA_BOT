@@ -62,3 +62,36 @@ export function phoneHref(phone: string): string {
   const digits = phone.replace(/[^\d+]/g, '');
   return `tel:${digits.length === 10 ? `+91${digits}` : digits}`;
 }
+
+/** `1000` -> `1,000`, with Indian digit grouping (`1,00,000`). */
+export function formatCount(n: number): string {
+  return n.toLocaleString('en-IN');
+}
+
+/** `1536` -> `1.5 KB`. Used for the size of a file picked for upload. */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const HONORIFIC = /^(adv(ocate)?|dr|mr|mrs|ms|miss|smt|shri|sri|shree|prof)\.?\s+/i;
+
+/**
+ * Up to two initials for an avatar: `Shalini Naidu` -> `SN`, `Adv. Dr. R. K. Rao`
+ * -> `RR`. Leading titles are skipped; an empty name gives `A` (for "Advocate").
+ */
+export function initials(name: string | null | undefined): string {
+  let rest = (name ?? '').trim();
+  while (HONORIFIC.test(rest)) rest = rest.replace(HONORIFIC, '');
+  const words = rest.split(/\s+/).filter((w) => /\p{L}/u.test(w));
+  if (words.length === 0) return 'A';
+  const letter = (w: string) => (w.match(/\p{L}/u)?.[0] ?? '').toUpperCase();
+  const first = words[0] as string;
+  const last = words[words.length - 1] as string;
+  return words.length === 1 ? letter(first) : letter(first) + letter(last);
+}
+
+/** Text for the sample-listing badge, kept in one place so every page says the same. */
+export const SAMPLE_LISTING_LABEL = 'Sample listing';

@@ -1,33 +1,80 @@
 'use client';
 
-import { MANDATORY_DISCLAIMER } from '@legal-platform/shared';
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
-import { Disclaimer, ErrorState, StatusBadge } from '@/components/ui';
+import { LanguageIcon, MapPinIcon, PhoneIcon, UsersIcon } from '@/components/icons';
+import { EmptyState, ErrorState, Notice } from '@/components/ui';
 import { ApiRequestError } from '@/lib/api-client';
 import { advocateClient, type AdvocateDirectoryEntry } from '@/lib/advocate-client';
 import {
+  SAMPLE_LISTING_LABEL,
   formatInr,
   formatPhone,
-  languageOptionLabel,
+  initials,
+  languageName,
   phoneHref,
   practiceAreaLabel,
-  stateOptionLabel,
+  stateName,
 } from '@/lib/format';
+import { CopyButton } from '../_components/copy-button';
+import { directoryHref } from '../_components/directory-memory';
+import { ArrowLeftIcon } from '../_components/local-icons';
+import styles from '../profile.module.css';
+
+const SIMILAR_COUNT = 3;
+
+function BackLink({ href }: { href: string }) {
+  return (
+    <Link href={href} className="btn btn-ghost btn-sm -ml-2 mb-3">
+      <ArrowLeftIcon />
+      Back to directory
+    </Link>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div role="status">
+      <span className="sr-only">Loading advocate profile</span>
+      <div className={`surface ${styles.hero}`} aria-hidden="true">
+        <div className={`skeleton skeleton-circle ${styles.heroAvatar}`} />
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="skeleton h-3 w-24" />
+          <div className="skeleton h-8 w-2/3" />
+          <div className="skeleton h-4 w-1/2" />
+        </div>
+      </div>
+      <div className={styles.grid} aria-hidden="true">
+        <div className={styles.main}>
+          <div className="skeleton h-24" />
+          <div className="skeleton h-36" />
+        </div>
+        <div className={styles.aside}>
+          <div className="skeleton h-48" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdvocateProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [advocate, setAdvocate] = useState<AdvocateDirectoryEntry | null>(null);
+  const [similar, setSimilar] = useState<AdvocateDirectoryEntry[]>([]);
   const [error, setError] = useState<{ message: string; retryable: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [nonce, setNonce] = useState(0);
+  const [backHref, setBackHref] = useState('/advocates');
 
   const retry = useCallback(() => setNonce((n) => n + 1), []);
+
+  useEffect(() => setBackHref(directoryHref()), []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setSimilar([]);
     advocateClient
       .get(id)
       .then((res) => {
@@ -35,7 +82,9 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const notFound = err instanceof ApiRequestError && err.status === 404;
+        // An id that is not a valid uuid is rejected with 400/422: same as "not listed".
+        const notFound = err instanceof ApiRequestError && [400, 404, 422].includes(err.status);
+        setAdvocate(null);
         setError({
           message: notFound
             ? 'This advocate could not be found, or is no longer listed.'
@@ -51,132 +100,295 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
     };
   }, [id, nonce]);
 
+  // The browser tab names the advocate once the profile is known.
+  const displayName = advocate?.display_name || (advocate ? 'Advocate' : null);
+  useEffect(() => {
+    if (!displayName) return;
+    const previous = document.title;
+    document.title = `${displayName} · Legal Advisor`;
+    return () => {
+      document.title = previous;
+    };
+  }, [displayName]);
+
+  // Other advocates in the same state with the same first practice area, from the
+  // public search endpoint. Failing here just hides the section.
+  const area = advocate?.practice_areas[0];
+  const state = advocate?.state_code;
+  useEffect(() => {
+    if (!advocate || !state) return;
+    let cancelled = false;
+    advocateClient
+      .search({ state, practice_area: area, page_size: SIMILAR_COUNT + 1 })
+      .then((res) => {
+        if (cancelled) return;
+        setSimilar(res.items.filter((a) => a.id !== advocate.id).slice(0, SIMILAR_COUNT));
+      })
+      .catch(() => {
+        if (!cancelled) setSimilar([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [advocate, area, state]);
+
   const fee = advocate ? formatInr(advocate.consultation_fee) : null;
+  const phone = advocate?.phone ? formatPhone(advocate.phone) : null;
+  const location = advocate ? `${advocate.city}, ${stateName(advocate.state_code)}` : '';
 
   return (
-    <main className="page page-narrow">
-      <Link href="/advocates" className="btn btn-ghost btn-sm -ml-2 mb-4">
-        ← Back to directory
-      </Link>
+    <main className={`page ${styles.page}`}>
+      <BackLink href={backHref} />
 
       {loading ? (
-        <div className="surface flex flex-col gap-3 p-6" role="status">
-          <span className="sr-only">Loading advocate profile</span>
-          <div className="skeleton h-7 w-1/2" />
-          <div className="skeleton h-4 w-1/3" />
-          <div className="skeleton mt-4 h-20" />
-        </div>
+        <ProfileSkeleton />
       ) : error || !advocate ? (
-        <ErrorState
-          title="Profile unavailable"
-          message={error?.message ?? 'Advocate not found.'}
-          onRetry={error?.retryable ? retry : undefined}
-        />
+        error && !error.retryable ? (
+          <EmptyState
+            icon={UsersIcon}
+            title="Advocate not found"
+            action={
+              <Link href={backHref} className="btn btn-secondary">
+                Back to directory
+              </Link>
+            }
+          >
+            {error.message}
+          </EmptyState>
+        ) : (
+          <ErrorState
+            title="Profile unavailable"
+            message={error?.message ?? 'Advocate not found.'}
+            onRetry={retry}
+          />
+        )
       ) : (
-        <article className="surface p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="display text-2xl">{advocate.display_name || 'Advocate'}</h1>
-              <p className="muted mt-1 text-sm">
-                {advocate.city}, {stateOptionLabel(advocate.state_code)}
-              </p>
+        <article>
+          <header className={`surface ${styles.hero}`}>
+            <span className={`avatar ${styles.heroAvatar}`} aria-hidden="true">
+              {initials(advocate.display_name)}
+            </span>
+            <div className={styles.heroBody}>
+              <div className="cluster">
+                <span className="eyebrow">Advocate profile</span>
+                {advocate.is_sample ? (
+                  <span className="badge badge-warn badge-sm">
+                    <span className="dot" aria-hidden="true" />
+                    {SAMPLE_LISTING_LABEL}
+                  </span>
+                ) : (
+                  <span className="badge badge-ok badge-sm">
+                    <span className="dot" aria-hidden="true" />
+                    Verified listing
+                  </span>
+                )}
+              </div>
+              <h1 className={`display display-sm ${styles.heroName}`}>
+                {advocate.display_name || 'Advocate'}
+              </h1>
+              <div className={styles.heroMeta}>
+                <span className={styles.heroMetaItem}>
+                  <MapPinIcon />
+                  {location}
+                </span>
+                {advocate.languages.length > 0 && (
+                  <span className={styles.heroMetaItem}>
+                    <LanguageIcon />
+                    {advocate.languages.map(languageName).join(', ')}
+                  </span>
+                )}
+              </div>
             </div>
-            {advocate.is_sample ? (
-              <StatusBadge tone="warn">Sample listing · not verified</StatusBadge>
-            ) : (
-              <StatusBadge tone="ok">Verified by platform</StatusBadge>
-            )}
-          </div>
+          </header>
 
           {advocate.is_sample && (
-            <div className="alert alert-warn mt-4" role="note">
-              <p className="text-sm">
-                This is synthetic sample data for trying the directory, not a real advocate. The
-                name and contact details are made up and have not been verified. Don&apos;t contact
-                them or rely on them for legal help.
+            <Notice tone="warn" title="Not a verified advocate" className="mt-4">
+              <p className="muted">
+                This is a sample listing: the name, location and contact details were made up to
+                show how the directory works. No real person is behind it, so do not contact them or
+                rely on them for legal help. Real advocates appear here once an administrator
+                imports or verifies them.
               </p>
+            </Notice>
+          )}
+
+          <div className={styles.grid}>
+            <div className={styles.main}>
+              {advocate.practice_areas.length > 0 && (
+                <section aria-labelledby="areas-heading">
+                  <div className={styles.sectionHead}>
+                    <h2 id="areas-heading" className="caps">
+                      Practice areas
+                    </h2>
+                  </div>
+                  <ul className={styles.areas}>
+                    {advocate.practice_areas.map((a) => (
+                      <li key={a} className="badge badge-accent">
+                        {practiceAreaLabel(a)}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              <section aria-labelledby="details-heading">
+                <div className={styles.sectionHead}>
+                  <h2 id="details-heading" className="caps">
+                    Details
+                  </h2>
+                </div>
+                <div className={styles.facts}>
+                  <dl className="dl">
+                    <dt>Location</dt>
+                    <dd>
+                      {location} ({advocate.state_code})
+                    </dd>
+                    {advocate.languages.length > 0 && (
+                      <>
+                        <dt>Languages</dt>
+                        <dd>{advocate.languages.map(languageName).join(', ')}</dd>
+                      </>
+                    )}
+                    {advocate.experience_years != null && (
+                      <>
+                        <dt>Experience</dt>
+                        <dd>
+                          {advocate.experience_years}{' '}
+                          {advocate.experience_years === 1 ? 'year' : 'years'}
+                        </dd>
+                      </>
+                    )}
+                    {fee && (
+                      <>
+                        <dt>Consultation fee</dt>
+                        <dd>{fee}, as set by the advocate</dd>
+                      </>
+                    )}
+                    <dt>Listing</dt>
+                    <dd>
+                      {advocate.is_sample
+                        ? 'Sample listing with synthetic data'
+                        : 'Verified listing, added by an administrator'}
+                    </dd>
+                  </dl>
+                </div>
+              </section>
+
+              {advocate.bio && (
+                <section aria-labelledby="about-heading">
+                  <div className={styles.sectionHead}>
+                    <h2 id="about-heading" className="caps">
+                      About
+                    </h2>
+                  </div>
+                  <p className={styles.bio}>{advocate.bio}</p>
+                </section>
+              )}
             </div>
-          )}
 
-          {advocate.is_sample && (advocate.phone || advocate.email) && (
-            <section className="surface-flat mt-6 p-4">
-              <h2 className="subtle text-xs font-semibold uppercase tracking-wider">
-                Contact (sample data, not real)
-              </h2>
-              <p className="muted mt-1.5 text-sm">
-                {[advocate.phone && formatPhone(advocate.phone), advocate.email]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-            </section>
-          )}
+            <aside className={styles.aside} aria-labelledby="contact-heading">
+              <section className={`surface ${styles.contact}`}>
+                <div>
+                  <h2 id="contact-heading" className="title">
+                    {advocate.is_sample ? 'Sample contact details' : 'Contact details'}
+                  </h2>
+                  {advocate.is_sample && (
+                    <p className="hint mt-1">Made up for this sample. They do not reach anyone.</p>
+                  )}
+                </div>
 
-          {!advocate.is_sample && (advocate.phone || advocate.email) && (
-            <section className="surface-flat mt-6 flex flex-wrap items-center gap-3 p-4">
-              <h2 className="subtle w-full text-xs font-semibold uppercase tracking-wider">
-                Contact
-              </h2>
-              {advocate.phone && (
-                <a href={phoneHref(advocate.phone)} className="btn btn-primary btn-sm">
-                  Call {formatPhone(advocate.phone)}
-                </a>
-              )}
-              {advocate.email && (
-                <a href={`mailto:${advocate.email}`} className="btn btn-secondary btn-sm">
-                  Email {advocate.email}
-                </a>
-              )}
-            </section>
-          )}
+                {!advocate.email && !phone && (
+                  <p className="muted text-sm">No contact details are listed for this advocate.</p>
+                )}
 
-          <dl className="mt-6 grid gap-4 sm:grid-cols-2">
-            {advocate.experience_years != null && (
-              <div className="surface-flat p-3">
-                <dt className="subtle text-xs">Experience</dt>
-                <dd className="mt-0.5 font-semibold">{advocate.experience_years} years</dd>
+                {advocate.email && (
+                  <div className={styles.contactRow}>
+                    <div className={styles.contactHead}>
+                      <span className={styles.contactLabel}>Email</span>
+                      <CopyButton text={advocate.email} what="email address" />
+                    </div>
+                    <span className={styles.contactValue}>{advocate.email}</span>
+                  </div>
+                )}
+
+                {phone && advocate.phone && (
+                  <div className={styles.contactRow}>
+                    <div className={styles.contactHead}>
+                      <span className={styles.contactLabel}>Phone</span>
+                      <CopyButton text={phone} what="phone number" />
+                    </div>
+                    <span className={`${styles.contactValue} tabular`}>{phone}</span>
+                  </div>
+                )}
+
+                {!advocate.is_sample && (advocate.phone || advocate.email) && (
+                  <div className="btn-group">
+                    {advocate.phone && (
+                      <a href={phoneHref(advocate.phone)} className="btn btn-primary btn-sm">
+                        <PhoneIcon />
+                        Call
+                      </a>
+                    )}
+                    {advocate.email && (
+                      <a href={`mailto:${advocate.email}`} className="btn btn-secondary btn-sm">
+                        Email
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {!advocate.is_sample && (
+                  <p className="note">
+                    Online booking isn&apos;t available yet. Contact the advocate directly to
+                    arrange a consultation.
+                  </p>
+                )}
+              </section>
+            </aside>
+          </div>
+
+          {similar.length > 0 && (
+            <section className={styles.similar} aria-labelledby="similar-heading">
+              <div className="section-head !mb-4">
+                <div>
+                  <h2 id="similar-heading" className="section-title">
+                    More advocates in {stateName(advocate.state_code)}
+                  </h2>
+                  <p className="section-lede">
+                    {area ? `Also listed under ${practiceAreaLabel(area)}.` : 'Also listed here.'}
+                  </p>
+                </div>
+                <Link
+                  href={`/advocates?state=${encodeURIComponent(advocate.state_code)}${
+                    area ? `&practice_area=${encodeURIComponent(area)}` : ''
+                  }`}
+                  className="link text-sm font-medium"
+                >
+                  See all
+                </Link>
               </div>
-            )}
-            {fee && (
-              <div className="surface-flat p-3">
-                <dt className="subtle text-xs">Consultation fee (set by advocate)</dt>
-                <dd className="mt-0.5 font-semibold">{fee}</dd>
-              </div>
-            )}
-            {advocate.languages.length > 0 && (
-              <div className="surface-flat p-3">
-                <dt className="subtle text-xs">Languages</dt>
-                <dd className="mt-0.5">{advocate.languages.map(languageOptionLabel).join(', ')}</dd>
-              </div>
-            )}
-            {advocate.practice_areas.length > 0 && (
-              <div className="surface-flat p-3 sm:col-span-2">
-                <dt className="subtle text-xs">Practice areas</dt>
-                <dd className="mt-1.5 flex flex-wrap gap-1.5">
-                  {advocate.practice_areas.map((a) => (
-                    <span key={a} className="badge">
-                      {practiceAreaLabel(a)}
+              <ul className={styles.similarGrid}>
+                {similar.map((a) => (
+                  <li key={a.id} className={styles.similarItem}>
+                    <span className="avatar avatar-sm" aria-hidden="true">
+                      {initials(a.display_name)}
                     </span>
-                  ))}
-                </dd>
-              </div>
-            )}
-          </dl>
-
-          {advocate.bio && (
-            <section className="mt-6">
-              <h2 className="subtle text-xs font-semibold uppercase tracking-wider">About</h2>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{advocate.bio}</p>
+                    <div className="min-w-0">
+                      <Link href={`/advocates/${a.id}`} className={styles.similarName}>
+                        {a.display_name || 'Advocate'}
+                      </Link>
+                      <p className={styles.similarMeta}>
+                        {a.city}
+                        {a.is_sample && <span className="subtle"> · Sample listing</span>}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
-
-          <p className="alert mt-6 text-sm">
-            Online booking isn&apos;t available yet. Contact the advocate directly to arrange a
-            consultation.
-          </p>
         </article>
       )}
-
-      <Disclaimer text={MANDATORY_DISCLAIMER} />
     </main>
   );
 }

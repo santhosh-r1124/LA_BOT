@@ -57,6 +57,45 @@ describe('streamMessage', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok');
   });
 
+  it('passes answer_mode, sources and advocates through the start event', async () => {
+    const start = {
+      conversation_id: 'c1',
+      legal_category: 'EMPLOYMENT_LAW',
+      jurisdiction_scope: 'CENTRAL',
+      risk_level: 'HIGH',
+      is_out_of_scope: false,
+      answer_mode: 'sources_only',
+      sources: [{ document_id: 'd1', document_title: 'T', section: null, article: null, source_url: 'https://x.example' }],
+      recommended_advocates: [{ id: 'a1' }],
+    };
+    const done = { conversation_id: 'c1', disclaimer: 'd', answer_mode: 'sources_only' };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          sseResponse([frame('start', start), frame('delta', { text: 'one' }), frame('delta', { text: 'two' }), frame('done', done)]),
+        ),
+    );
+    const onStart = vi.fn();
+    const deltas: string[] = [];
+    const result = await streamMessage('q', null, null, { onStart, onDelta: (t) => deltas.push(t) });
+    expect(onStart).toHaveBeenCalledWith(start);
+    expect(onStart.mock.calls[0]?.[0].answer_mode).toBe('sources_only');
+    expect(deltas).toEqual(['one', 'two']);
+    expect(result.answer_mode).toBe('sources_only');
+  });
+
+  it('treats a garbled frame as an interrupted stream, not a crash', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(sseResponse(['event: delta\ndata: {not json\n\n'])),
+    );
+    await expect(streamMessage('hi', null, null)).rejects.toMatchObject({
+      code: 'stream_interrupted',
+    });
+  });
+
   it('turns an in-stream error event into ApiRequestError', async () => {
     vi.stubGlobal(
       'fetch',

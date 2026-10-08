@@ -2,64 +2,54 @@
 
 import { MANDATORY_DISCLAIMER } from '@legal-platform/shared';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { LegalText } from '@/components/legal-text';
-import { StatusBadge } from '@/components/ui';
-import { ApiRequestError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertIcon, InfoIcon, RefreshIcon } from '@/components/icons';
 import {
   chatClient,
+  type AnswerMode,
   type ChatMessageOut,
   type ConversationSummary,
   type RecommendedAdvocate,
   type SourceOut,
 } from '@/lib/chat-client';
-import { formatEnumLabel, stateName } from '@/lib/format';
+import { useAuth } from '@/lib/auth-context';
 import { usePlatformStatus } from '@/lib/status-client';
+import {
+  classifyChatError,
+  inferAnswerMode,
+  readLlmMode,
+  readQuestionParam,
+  type ChatFailure,
+  type RiskLevel,
+} from './chat-helpers';
+import { HistoryIcon, PlusIcon } from './chat-icons';
+import styles from './chat.module.css';
+import { Composer } from './composer';
+import { EmptyState } from './empty-state';
+import { AssistantReply, UserMessage, type ReplyData } from './message';
+import { EmptyLibraryNotice, ModeNotice, NoticeSkeleton, StatusErrorNotice } from './notices';
+import { Drawer, HistoryPanel, type SetupSummary } from './sidebar';
 
 const CONVERSATION_KEY = 'lp_chat_conversation_id';
 
-// FRD example questions — shown on a fresh conversation.
-const SUGGESTED_QUESTIONS = [
-  'What is an affidavit?',
-  'What documents are generally required for an affidavit?',
-  'What is the difference between an agreement and a contract?',
-  'What information is normally included in a rental agreement?',
-  'What are the basic requirements for an employment agreement?',
-  'What is the process for registering a company in India?',
-];
-
-const JURISDICTION_LABEL: Record<string, string> = {
-  CENTRAL: 'Central law',
-  STATE: 'Varies by state',
-  LOCAL: 'Local rules apply',
-  DISTRICT: 'District-level procedure',
-  COURT: 'Depends on court jurisdiction',
-  REGISTRATION_AUTHORITY: 'Registration authority',
-  STAMP_DUTY: 'Stamp duty varies by state',
-};
-
-const RISK_TONE = {
-  LOW: 'ok',
-  MEDIUM: 'neutral',
-  HIGH: 'warn',
-  CRITICAL: 'danger',
-} as const;
-
-function titleCase(value: string): string {
-  return value
-    .split('_')
-    .map((w) => (w === 'IT' || w === 'IP' ? w : w[0] + w.slice(1).toLowerCase()))
-    .join(' ');
-}
+/**
+ * `retryText`: the question can be resent as is. `keptText`: the question is
+ * still shown in the thread as "not sent" and can be pulled back into the box.
+ */
+type Failure = ChatFailure & { retryText?: string; keptText?: string };
 
 interface StreamingTurn {
   text: string;
+  /** Unknown until the first event arrives. */
+  mode: AnswerMode | null;
+  stage: 'classifying' | 'writing';
   sources: SourceOut[] | null;
   category: string | null;
   jurisdiction: string | null;
-  risk: ChatMessageOut['risk_level'];
+  risk: RiskLevel | null;
+  outOfScope: boolean;
   advocates: RecommendedAdvocate[];
+  question: string;
 }
 
 function storageGet(key: string): string | null {
@@ -74,56 +64,129 @@ function storageSet(key: string, value: string | null) {
     if (value === null) window.localStorage.removeItem(key);
     else window.localStorage.setItem(key, value);
   } catch {
-    /* storage unavailable (private mode) — conversation just won't persist */
+    /* storage unavailable (private mode): the conversation just won't persist */
   }
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+function hasFinePointer(): boolean {
+  return window.matchMedia?.('(pointer: fine)').matches ?? true;
 }
 
 export default function ChatPage() {
   const { user, accessToken, loading: authLoading } = useAuth();
-  const { state: statusState } = usePlatformStatus();
+  const { state: statusState, reload: reloadStatus } = usePlatformStatus();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageOut[]>([]);
   const [input, setInput] = useState('');
-  const [advocatesByMessage, setAdvocatesByMessage] = useState<
-    Record<string, RecommendedAdvocate[]>
-  >({});
+  const [emptyHint, setEmptyHint] = useState(false);
+  const [advocatesByMessage, setAdvocatesByMessage] = useState<Record<string, RecommendedAdvocate[]>>({});
+  const [modeByMessage, setModeByMessage] = useState<Record<string, AnswerMode>>({});
   const [streaming, setStreaming] = useState<StreamingTurn | null>(null);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<{ message: string; retryText?: string } | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [disclaimer, setDisclaimer] = useState(MANDATORY_DISCLAIMER);
   const [history, setHistory] = useState<ConversationSummary[] | null>(null);
   const [historyError, setHistoryError] = useState(false);
-  const [showHistoryMobile, setShowHistoryMobile] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [historyNonce, setHistoryNonce] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // Restore a saved conversation once auth state has settled.
-  useEffect(() => {
-    if (authLoading) return;
-    const saved = storageGet(CONVERSATION_KEY);
-    if (!saved) return;
-    let cancelled = false;
-    chatClient
-      .getConversation(saved, accessToken)
-      .then((detail) => {
-        if (cancelled) return;
-        setConversationId(detail.id);
-        setMessages(detail.messages);
-      })
-      .catch(() => storageSet(CONVERSATION_KEY, null));
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, accessToken]);
+  const abortRef = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
+  /** Set when a running reply is cancelled because the user switched conversation. */
+  const discardRef = useRef(false);
+  const bootedRef = useRef(false);
+  const scrollToEndRef = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const pendingUserRef = useRef<HTMLLIElement | null>(null);
+  const failureRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
+  const sendRef = useRef<(text?: string) => Promise<void>>(async () => {});
+
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  /* ---- Status ------------------------------------------------------------- */
+  const status = statusState.kind === 'ready' ? statusState.status : null;
+  const llmMode = readLlmMode(status);
+  const generalAnswers = status?.features?.general_answers ?? true;
+  const libraryDocs = status?.knowledge_base.documents_indexed ?? null;
+  const kbEmpty = status !== null && status.knowledge_base.available && libraryDocs === 0;
+
+  /* ---- Per-message data ---------------------------------------------------- */
+  const replies = useMemo(() => {
+    const out = new Map<string, ReplyData>();
+    messages.forEach((m, i) => {
+      if (m.role !== 'assistant') return;
+      const prev = i > 0 ? messages[i - 1] : undefined;
+      const asked = prev?.role === 'user' ? prev : undefined;
+      const mode = modeByMessage[m.id] ?? inferAnswerMode(m.content, m.answer_mode);
+      const sources = m.sources ?? null;
+      out.set(m.id, {
+        id: m.id,
+        text: m.content,
+        mode,
+        sources,
+        category: asked && !asked.is_out_of_scope ? asked.legal_category : null,
+        jurisdiction: asked && !asked.is_out_of_scope ? asked.jurisdiction_scope : null,
+        risk: asked && !asked.is_out_of_scope ? asked.risk_level : null,
+        outOfScope: Boolean(asked?.is_out_of_scope),
+        advocates: advocatesByMessage[m.id] ?? null,
+        general: mode === 'ai' && generalAnswers && Array.isArray(sources) && sources.length === 0,
+        question: asked?.content ?? null,
+      });
+    });
+    return out;
+  }, [messages, modeByMessage, advocatesByMessage, generalAnswers]);
+
+  const latestReplyMode = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m?.role === 'assistant') return replies.get(m.id)?.mode ?? null;
+    }
+    return null;
+  }, [messages, replies]);
+
+  const offline = llmMode === 'offline' || latestReplyMode === 'sources_only';
+
+  const sourceDatasets = status?.knowledge_base.sources ?? [];
+  const fixtureOnly = sourceDatasets.length > 0 && sourceDatasets.every((s) => /fixture/i.test(s.dataset));
+  const sampleAdvocates = status?.advocate_directory.sample_advocates ?? null;
+  const totalAdvocates = status?.advocate_directory.verified_advocates ?? null;
+  const advocatesAreSamples = sampleAdvocates !== null && sampleAdvocates > 0 && sampleAdvocates === totalAdvocates;
+
+  const setup: SetupSummary | null = status
+    ? {
+        aiOn: llmMode === null ? null : llmMode === 'ai',
+        documents: libraryDocs,
+        fixtureOnly,
+        advocates: totalAdvocates,
+        advocatesAreSamples,
+      }
+    : null;
+
+  const modeDetails = [
+    'Replies are assembled from library passages, not written by an AI model, so you read the source text itself.',
+    'The topic, risk and jurisdiction labels come from fixed rules rather than a model. Treat them as a guide.',
+    fixtureOnly ? 'The library in this setup holds test fixture passages, not real judgments.' : null,
+    advocatesAreSamples ? 'Advocate listings in this setup are synthetic samples, not real people.' : null,
+  ].filter((line): line is string => line !== null);
+
+  /* ---- Effects -------------------------------------------------------------- */
 
   // Signed-in users see their history in the sidebar.
   useEffect(() => {
     if (!accessToken) {
       setHistory(null);
+      setHistoryError(false);
       return;
     }
     let cancelled = false;
+    setHistoryError(false);
     chatClient
       .listConversations(accessToken)
       .then((rows) => !cancelled && setHistory(rows))
@@ -131,24 +194,65 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, conversationId]);
+  }, [accessToken, conversationId, historyNonce]);
 
+  // A conversation that was just loaded opens at its latest message.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, streaming?.text]);
+    if (!scrollToEndRef.current) return;
+    scrollToEndRef.current = false;
+    // Land on the latest message with the box in view, not on the site footer below.
+    const main = mainRef.current;
+    if (!main) return;
+    const bottom = main.getBoundingClientRect().bottom + window.scrollY;
+    window.scrollTo({ top: Math.max(0, bottom - window.innerHeight), behavior: 'auto' });
+  }, [messages]);
+
+  // Sending: bring the new question to the top so the reply grows below it.
+  useEffect(() => {
+    if (!sending) return;
+    const el = pendingUserRef.current;
+    if (!el) return;
+    // Only move the page when the question is not already comfortably in view.
+    const rect = el.getBoundingClientRect();
+    const headerRoom = 72;
+    const dockRoom = 180;
+    if (rect.top >= headerRoom && rect.bottom <= window.innerHeight - dockRoom) return;
+    el.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }, [sending]);
+
+  // An error must never sit out of sight below the fold.
+  useEffect(() => {
+    if (!failure) return;
+    failureRef.current?.scrollIntoView({
+      block: 'nearest',
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    });
+  }, [failure]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  /* ---- Actions --------------------------------------------------------------- */
+
   async function handleSend(text?: string) {
     const content = (text ?? input).trim();
-    if (!content || sending) return;
-    setError(null);
-    setInput('');
+    if (!content) {
+      setEmptyHint(true);
+      inputRef.current?.focus();
+      return;
+    }
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    discardRef.current = false;
+    setFailure(null);
+    setEmptyHint(false);
+    // Clear the box when the sent text is what is in it (typed or restored), but
+    // leave an unrelated draft alone when a suggestion is clicked.
+    if (content === input.trim()) setInput('');
     setSending(true);
 
     const pendingId = `pending-${Date.now()}`;
     setMessages((prev) => [
-      ...prev,
+      ...prev.filter((m) => !m.id.startsWith('pending-')),
       {
         id: pendingId,
         role: 'user',
@@ -162,27 +266,38 @@ export default function ChatPage() {
     ]);
     setStreaming({
       text: '',
+      mode: null,
+      stage: 'classifying',
       sources: null,
       category: null,
       jurisdiction: null,
       risk: null,
+      outOfScope: false,
       advocates: [],
+      question: content,
     });
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let startMode: AnswerMode | undefined;
     try {
       const res = await chatClient.streamMessage(content, conversationId, accessToken, {
         signal: controller.signal,
-        onStart: (start) =>
+        onStart: (start) => {
+          startMode = start.answer_mode ?? 'ai';
           setStreaming((s) => ({
             text: s?.text ?? '',
+            mode: start.answer_mode ?? 'ai',
+            stage: 'writing',
             sources: start.sources,
             category: start.is_out_of_scope ? null : start.legal_category,
-            jurisdiction: start.jurisdiction_scope,
+            jurisdiction: start.is_out_of_scope ? null : start.jurisdiction_scope,
             risk: start.is_out_of_scope ? null : start.risk_level,
+            outOfScope: start.is_out_of_scope,
             advocates: start.recommended_advocates ?? [],
-          })),
+            question: content,
+          }));
+        },
         onDelta: (delta) => setStreaming((s) => (s ? { ...s, text: s.text + delta } : s)),
       });
       setDisclaimer(res.disclaimer);
@@ -192,504 +307,371 @@ export default function ChatPage() {
         ...prev,
         [res.assistant_message.id]: res.recommended_advocates ?? [],
       }));
+      setModeByMessage((prev) => ({
+        ...prev,
+        [res.assistant_message.id]: res.answer_mode ?? startMode ?? 'ai',
+      }));
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== pendingId),
         res.user_message,
         res.assistant_message,
       ]);
     } catch (err) {
-      setMessages((prev) => prev.filter((m) => m.id !== pendingId));
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        setInput(content);
-        setError({ message: 'Stopped. Nothing from that turn was saved.' });
+      if (discardRef.current) {
+        setMessages((prev) => prev.filter((m) => m.id !== pendingId));
       } else {
-        setError({
-          message:
-            err instanceof ApiRequestError
-              ? err.message
-              : 'Something went wrong reaching the assistant.',
-          retryText: content,
-        });
+        const classified = classifyChatError(err);
+        if (classified.kind === 'stopped') {
+          // Nothing was saved: the question goes back into the box to edit.
+          setMessages((prev) => prev.filter((m) => m.id !== pendingId));
+          setInput(content);
+          setFailure(classified);
+        } else {
+          // Keep the question in the thread, marked as not sent, with the error under it.
+          setFailure({
+            ...classified,
+            retryText: classified.retryable ? content : undefined,
+            keptText: content,
+          });
+        }
       }
     } finally {
       abortRef.current = null;
+      sendingRef.current = false;
       setStreaming(null);
       setSending(false);
-      inputRef.current?.focus();
+      if (hasFinePointer()) inputRef.current?.focus();
     }
   }
 
-  function handleNewConversation() {
+  useEffect(() => {
+    sendRef.current = handleSend;
+  });
+
+  function handleStop() {
+    abortRef.current?.abort();
+  }
+
+  function startFresh() {
+    discardRef.current = true;
     abortRef.current?.abort();
     setConversationId(null);
     setMessages([]);
-    setError(null);
+    setStreaming(null);
+    setFailure(null);
+    setEmptyHint(false);
+    setRestoring(false);
     storageSet(CONVERSATION_KEY, null);
+  }
+
+  function handleNewConversation() {
+    startFresh();
+    setDrawerOpen(false);
     inputRef.current?.focus();
   }
 
-  async function loadConversation(id: string) {
+  async function openConversation(id: string) {
+    discardRef.current = true;
+    abortRef.current?.abort();
+    setLoadingId(id);
+    setRestoring(true);
+    setFailure(null);
     try {
       const detail = await chatClient.getConversation(id, accessToken);
+      scrollToEndRef.current = true;
       setConversationId(detail.id);
       setMessages(detail.messages);
       storageSet(CONVERSATION_KEY, detail.id);
-      setShowHistoryMobile(false);
-      setError(null);
+      setDrawerOpen(false);
     } catch (err) {
-      setError({
-        message: err instanceof ApiRequestError ? err.message : 'Could not load that conversation.',
+      setFailure({
+        ...classifyChatError(err),
+        title: 'Could not open that conversation',
+        message: 'It may have been removed, or the server did not answer. Try again in a moment.',
+        retryable: false,
+        needsLogin: false,
+        retryText: undefined,
       });
+    } finally {
+      setLoadingId(null);
+      setRestoring(false);
     }
   }
 
-  function onInputKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
-    }
+  function editFailedQuestion() {
+    if (!failure?.keptText) return;
+    const text = failure.keptText;
+    setMessages((prev) => prev.filter((m) => !m.id.startsWith('pending-')));
+    setFailure(null);
+    setInput(text);
+    inputRef.current?.focus();
   }
 
-  const status = statusState.kind === 'ready' ? statusState.status : null;
-  const llmMissing = status !== null && !status.llm.configured;
-  const kbEmpty =
-    status !== null && status.knowledge_base.available && !status.knowledge_base.documents_indexed;
-  // Replies with no backing source are general-knowledge answers unless the
-  // server runs in strict sources-only mode.
-  const generalAnswers = status?.features?.general_answers ?? true;
+  function reuseQuestion(question: string) {
+    setInput(question);
+    setEmptyHint(false);
+    inputRef.current?.focus();
+  }
+
+  // Once the session has settled: start from `?q=` if there is one (and clear it
+  // from the address bar), otherwise restore the saved conversation. The timer
+  // makes React's dev double-mount harmless: only the second effect survives.
+  useEffect(() => {
+    if (authLoading || bootedRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (bootedRef.current) return;
+      bootedRef.current = true;
+
+      const question = readQuestionParam(window.location.search);
+      if (question !== null) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('q');
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        storageSet(CONVERSATION_KEY, null);
+        void sendRef.current(question);
+        return;
+      }
+
+      const saved = storageGet(CONVERSATION_KEY);
+      if (!saved) return;
+      setRestoring(true);
+      chatClient
+        .getConversation(saved, accessToken)
+        .then((detail) => {
+          scrollToEndRef.current = true;
+          setConversationId(detail.id);
+          setMessages(detail.messages);
+        })
+        .catch(() => storageSet(CONVERSATION_KEY, null))
+        .finally(() => setRestoring(false));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [authLoading, accessToken]);
+
+  /* ---- Render ------------------------------------------------------------------ */
+
+  const lastPendingId = [...messages].reverse().find((m) => m.id.startsWith('pending-'))?.id;
+  const isEmpty = messages.length === 0 && !streaming && !restoring;
+
+  const streamingReply: ReplyData | null = streaming
+    ? {
+        id: 'streaming',
+        text: streaming.text,
+        mode: streaming.mode,
+        sources: streaming.sources,
+        category: streaming.category,
+        jurisdiction: streaming.jurisdiction,
+        risk: streaming.risk,
+        outOfScope: streaming.outOfScope,
+        advocates: streaming.advocates,
+        general:
+          streaming.mode === 'ai' &&
+          generalAnswers &&
+          Array.isArray(streaming.sources) &&
+          streaming.sources.length === 0,
+        question: streaming.question,
+      }
+    : null;
 
   const historyPanel = (
-    <div className="flex flex-col gap-2">
-      <button type="button" onClick={handleNewConversation} className="btn btn-secondary w-full">
-        New conversation
-      </button>
-      {user ? (
-        <nav aria-label="Conversation history" className="mt-2">
-          <p className="subtle px-2 pb-1 text-xs font-semibold uppercase tracking-wider">History</p>
-          {historyError ? (
-            <p className="text-danger px-2 text-xs">Couldn&apos;t load history.</p>
-          ) : history === null ? (
-            <div className="flex flex-col gap-2 px-2" role="status">
-              <span className="sr-only">Loading history</span>
-              <div className="skeleton h-4" />
-              <div className="skeleton h-4 w-3/4" />
-            </div>
-          ) : history.length === 0 ? (
-            <p className="subtle px-2 text-xs">No past conversations yet.</p>
-          ) : (
-            <ul className="flex max-h-[60vh] flex-col overflow-y-auto">
-              {history.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => void loadConversation(c.id)}
-                    aria-current={c.id === conversationId ? 'true' : undefined}
-                    className={`w-full truncate rounded-md px-2 py-1.5 text-left text-sm ${
-                      c.id === conversationId
-                        ? 'text-fg bg-white/[0.07]'
-                        : 'text-fg-muted hover:text-fg hover:bg-white/[0.04]'
-                    }`}
-                  >
-                    {c.title || 'Untitled conversation'}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </nav>
-      ) : (
-        <p className="subtle mt-2 px-1 text-xs leading-relaxed">
-          You&apos;re chatting anonymously.{' '}
-          <Link href="/login" className="link">
-            Log in
-          </Link>{' '}
-          to keep your history across devices.
-        </p>
-      )}
-    </div>
+    <HistoryPanel
+      signedIn={Boolean(user)}
+      history={history}
+      historyError={historyError}
+      activeId={conversationId}
+      loadingId={loadingId}
+      onNew={handleNewConversation}
+      onSelect={(id) => void openConversation(id)}
+      onRetryHistory={() => setHistoryNonce((n) => n + 1)}
+      setup={setup}
+    />
   );
 
+  const failureClass =
+    failure?.tone === 'danger' ? 'alert-danger' : failure?.tone === 'warn' ? 'alert-warn' : 'alert-info';
+
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside className="hidden lg:block">
-        <div className="sticky top-20">{historyPanel}</div>
+    <div className={styles.shell}>
+      <aside className={styles.sidebar} aria-label="Conversations">
+        {historyPanel}
       </aside>
 
-      <section className="flex min-h-[calc(100dvh-7.5rem)] flex-col">
-        <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="display text-2xl">Legal chat</h1>
-            <p className="muted mt-1 text-sm" aria-live="polite">
-              {statusState.kind === 'loading' && 'Checking the knowledge base…'}
-              {statusState.kind === 'error' && 'Knowledge base status unavailable.'}
-              {status &&
-                (status.knowledge_base.documents_indexed
-                  ? `Answers cite the ${status.knowledge_base.documents_indexed} indexed legal document${status.knowledge_base.documents_indexed === 1 ? '' : 's'} when one is relevant, and say so when none is.`
-                  : generalAnswers
-                    ? 'General information about Indian law, in plain language.'
-                    : 'Answers are grounded only in indexed legal documents.')}
-            </p>
-          </div>
-          <div className="flex gap-2 lg:hidden">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              aria-expanded={showHistoryMobile}
-              aria-controls="mobile-history"
-              onClick={() => setShowHistoryMobile((v) => !v)}
-            >
-              {showHistoryMobile ? 'Hide history' : 'History'}
-            </button>
-          </div>
-        </header>
+      <Drawer open={drawerOpen} onClose={closeDrawer} title="Conversations">
+        {historyPanel}
+      </Drawer>
 
-        {showHistoryMobile && (
-          <div id="mobile-history" className="surface mb-4 p-3 lg:hidden">
-            {historyPanel}
-          </div>
-        )}
-
-        {llmMissing && (
-          <div className="alert alert-danger mb-4" role="alert">
-            <div>
-              <p className="font-semibold">The assistant isn&apos;t configured on this server.</p>
-              <p className="muted mt-0.5 text-sm">
-                An administrator needs to set a model provider key (free options: Gemini, Groq, or a
-                local Ollama model). Messages will fail until then.
-              </p>
+      <main ref={mainRef} className={styles.main}>
+        <div className={styles.column}>
+          <div className={styles.toolbar}>
+            <div className={styles.toolbarTitle}>
+              <button
+                type="button"
+                className={`btn btn-secondary btn-sm ${styles.mobileOnly}`}
+                aria-haspopup="dialog"
+                aria-expanded={drawerOpen}
+                onClick={() => setDrawerOpen(true)}
+              >
+                <HistoryIcon />
+                History
+              </button>
+              <h1 className="display text-2xl">Legal chat</h1>
+            </div>
+            <div className={styles.toolbarActions}>
+              <button
+                type="button"
+                className={`btn btn-secondary btn-sm ${styles.mobileOnly}`}
+                onClick={handleNewConversation}
+              >
+                <PlusIcon />
+                New
+              </button>
             </div>
           </div>
-        )}
-        {!llmMissing && kbEmpty && (
-          <div className="alert alert-warn mb-4" role="status">
-            <div>
-              <p className="font-semibold">No legal documents have been indexed yet.</p>
-              <p className="muted mt-0.5 text-sm">
-                {status?.knowledge_base.corpus_load?.state === 'running'
-                  ? `${status.knowledge_base.corpus_load.message ?? 'Court judgments are being loaded.'} `
-                  : status?.knowledge_base.corpus_load?.state === 'failed'
-                    ? `Loading court judgments failed: ${status.knowledge_base.corpus_load.message ?? 'unknown error'} `
-                    : ''}
-                {generalAnswers
-                  ? 'Until then, answers are general information from the AI model, not drawn from any legal document. Verify anything important on India Code or with an advocate.'
-                  : "Rather than guess, the assistant will say it doesn't have enough verified information until documents are loaded."}
-              </p>
-            </div>
-          </div>
-        )}
 
-        <div
-          className="flex-1"
-          role="log"
-          aria-live="polite"
-          aria-busy={sending}
-          aria-label="Conversation"
-        >
-          {messages.length === 0 && !streaming ? (
-            <div className="flex flex-col items-start gap-4 py-8">
-              <p className="muted text-sm">Try one of these, or ask your own question:</p>
-              <div className="grid w-full gap-2 sm:grid-cols-2">
-                {SUGGESTED_QUESTIONS.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => void handleSend(q)}
-                    disabled={sending}
-                    className="surface-flat surface-interactive px-4 py-3 text-left text-sm"
-                  >
-                    {q}
-                  </button>
-                ))}
+          {statusState.kind === 'loading' && <NoticeSkeleton />}
+          {statusState.kind === 'error' && <StatusErrorNotice onRetry={reloadStatus} />}
+          {offline && <ModeNotice details={modeDetails} />}
+          {kbEmpty && (
+            <EmptyLibraryNotice>
+              {offline
+                ? 'Replies cannot include any passages until documents are loaded.'
+                : generalAnswers
+                  ? 'Until then, answers are general information from the AI model, not drawn from any legal document.'
+                  : 'Until then, the assistant will say it does not have enough verified information.'}
+            </EmptyLibraryNotice>
+          )}
+        </div>
+
+        <div className={`${styles.column} ${styles.content}`}>
+          {restoring ? (
+            <div className={styles.restoring} role="status">
+              <span className="sr-only">Opening the conversation</span>
+              <div className="skeleton skeleton-block ml-auto h-10 w-2/3" aria-hidden="true" />
+              <div className="flex flex-col gap-2.5" aria-hidden="true">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-4 w-full" />
+                <div className="skeleton h-4 w-11/12" />
+                <div className="skeleton h-4 w-2/3" />
               </div>
             </div>
+          ) : isEmpty ? (
+            <EmptyState mode={llmMode} disabled={sending} onPick={(q) => void handleSend(q)} />
           ) : (
-            <ol className="flex flex-col gap-5">
-              {messages.map((m, i) => {
-                const prev = i > 0 ? messages[i - 1] : undefined;
-                return (
-                  <li key={m.id}>
-                    {m.role === 'user' ? (
-                      <UserBubble text={m.content} />
-                    ) : (
-                      <AssistantMessage
-                        id={m.id}
-                        text={m.content}
-                        general={
-                          generalAnswers && Array.isArray(m.sources) && m.sources.length === 0
-                        }
-                        sources={m.sources ?? null}
-                        category={
-                          prev?.role === 'user' && !prev.is_out_of_scope
-                            ? prev.legal_category
-                            : null
-                        }
-                        jurisdiction={prev?.role === 'user' ? prev.jurisdiction_scope : null}
-                        risk={
-                          prev?.role === 'user' && !prev.is_out_of_scope ? prev.risk_level : null
-                        }
-                        advocates={advocatesByMessage[m.id] ?? []}
-                      />
-                    )}
-                  </li>
-                );
-              })}
-              {streaming && (
-                <li>
-                  <AssistantMessage
-                    id="streaming"
-                    text={streaming.text}
-                    general={
-                      generalAnswers &&
-                      Array.isArray(streaming.sources) &&
-                      streaming.sources.length === 0
-                    }
-                    sources={streaming.sources}
-                    category={streaming.category}
-                    jurisdiction={streaming.jurisdiction}
-                    risk={streaming.risk}
-                    advocates={streaming.advocates}
-                    pending
-                  />
-                </li>
-              )}
-            </ol>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        {error && (
-          <div className="alert alert-danger mt-4 items-center justify-between" role="alert">
-            <p className="text-sm">{error.message}</p>
-            {error.retryText && (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={() => void handleSend(error.retryText)}
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="surface bg-elevated/95 sticky bottom-3 mt-4 p-2">
-          <label htmlFor="chat-input" className="sr-only">
-            Ask a legal question
-          </label>
-          <div className="flex items-end gap-2">
-            <textarea
-              id="chat-input"
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onInputKeyDown}
-              rows={2}
-              maxLength={4000}
-              placeholder="Ask a question about Indian law…"
-              className="text-fg placeholder:text-fg-subtle max-h-48 min-h-[2.75rem] flex-1 resize-y bg-transparent px-3 py-2 text-sm focus:outline-none"
-            />
-            {sending ? (
-              <button
-                type="button"
-                onClick={() => abortRef.current?.abort()}
-                className="btn btn-secondary"
-              >
-                Stop
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => void handleSend()}
-                disabled={!input.trim()}
-                className="btn btn-primary"
-              >
-                Send
-              </button>
-            )}
-          </div>
-          <p className="subtle px-3 pb-1 text-[11px]">Enter to send · Shift+Enter for a new line</p>
-        </div>
-
-        <p className="subtle mt-4 text-center text-xs leading-relaxed">{disclaimer}</p>
-      </section>
-    </main>
-  );
-}
-
-function UserBubble({ text }: { text: string }) {
-  return (
-    <div className="flex justify-end">
-      <div className="border-accent/25 bg-accent-soft max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md border px-4 py-2.5 text-sm">
-        <span className="sr-only">You: </span>
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function AssistantMessage({
-  id,
-  text,
-  general,
-  sources,
-  category,
-  jurisdiction,
-  risk,
-  advocates,
-  pending = false,
-}: {
-  id: string;
-  text: string;
-  /** No indexed source backs this reply: it's general AI-generated information. */
-  general: boolean;
-  sources: SourceOut[] | null;
-  category: string | null;
-  jurisdiction: string | null;
-  risk: ChatMessageOut['risk_level'];
-  advocates: RecommendedAdvocate[];
-  pending?: boolean;
-}) {
-  const prefix = `src-${id}`;
-  const jurisdictionLabel = jurisdiction ? JURISDICTION_LABEL[jurisdiction] : undefined;
-  return (
-    <article className="surface-flat p-4 sm:p-5" aria-label="Assistant answer">
-      {(category || jurisdictionLabel || general || risk) && (
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {category && <StatusBadge tone="accent">{titleCase(category)}</StatusBadge>}
-          {risk && <StatusBadge tone={RISK_TONE[risk]}>Risk: {titleCase(risk)}</StatusBadge>}
-          {general && <StatusBadge tone="neutral">General information</StatusBadge>}
-          {jurisdictionLabel && (
-            <StatusBadge tone={jurisdiction === 'CENTRAL' ? 'neutral' : 'warn'}>
-              {jurisdictionLabel}
-            </StatusBadge>
-          )}
-        </div>
-      )}
-
-      {text ? (
-        <LegalText text={text} sourceIdPrefix={prefix} sourceCount={sources?.length ?? 0} />
-      ) : (
-        <div role="status" className="flex flex-col gap-2">
-          <span className="muted text-sm">Thinking about your question…</span>
-          <div className="skeleton h-3.5 w-full" />
-          <div className="skeleton h-3.5 w-5/6" />
-        </div>
-      )}
-      {pending && text && (
-        <span className="bg-accent ml-1 inline-block h-4 w-1.5 animate-pulse align-middle" />
-      )}
-
-      {general && text && !pending && (
-        <p className="subtle border-line mt-4 border-t pt-3 text-xs leading-relaxed">
-          Not drawn from any document in the platform&apos;s legal library. Check important details
-          against the official text on{' '}
-          <a
-            href="https://www.indiacode.nic.in/"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="link"
-          >
-            India Code
-          </a>{' '}
-          or with an advocate.
-        </p>
-      )}
-
-      {sources && sources.length > 0 && (
-        <div className="border-line mt-4 border-t pt-3">
-          <p className="subtle mb-1.5 text-xs font-semibold uppercase tracking-wider">Sources</p>
-          <ol className="flex flex-col gap-1 text-sm">
-            {sources.map((s, i) => (
-              <li key={`${s.document_id}-${i}`} id={`${prefix}-${i + 1}`} className="flex gap-2">
-                <span className="cite shrink-0">{i + 1}</span>
-                <span className="flex flex-col">
-                  <a href={s.source_url} target="_blank" rel="noreferrer noopener" className="link">
-                    {s.document_title}
-                    {s.section ? `, Section ${s.section}` : ''}
-                    {s.article ? `, Article ${s.article}` : ''}
-                    <span className="sr-only"> (opens the source in a new tab)</span>
-                  </a>
-                  {(s.case_name || s.court || s.date || s.citation || s.dataset) && (
-                    <span className="subtle text-xs">
-                      {[s.case_name, s.court, s.date, s.citation].filter(Boolean).join(' · ')}
-                      {s.dataset && (
-                        <>
-                          {s.case_name || s.court || s.date || s.citation ? ' · ' : ''}
-                          Hugging Face dataset {s.dataset}
-                        </>
+            <div role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation" aria-busy={sending}>
+              <ol className={styles.thread}>
+                {messages.map((m) => {
+                  if (m.role === 'user') {
+                    return (
+                      <li
+                        key={m.id}
+                        ref={m.id === lastPendingId ? pendingUserRef : undefined}
+                        className={styles.turnUser}
+                      >
+                        <UserMessage text={m.content} />
+                        {failure?.keptText !== undefined && m.id === lastPendingId && !sending && (
+                          <p className={styles.notSent}>Not sent</p>
+                        )}
+                      </li>
+                    );
+                  }
+                  const reply = replies.get(m.id);
+                  return (
+                    <li key={m.id}>
+                      {reply && (
+                        <AssistantReply
+                          reply={reply}
+                          libraryDocs={libraryDocs}
+                          onReuse={reuseQuestion}
+                        />
                       )}
-                    </span>
-                  )}
-                  {s.excerpt && (
-                    <details className="mt-1">
-                      <summary className="link cursor-pointer text-xs">
-                        View the passage used
-                      </summary>
-                      <blockquote className="border-line subtle mt-1 border-l-2 pl-3 text-xs leading-relaxed">
-                        {s.excerpt}
-                      </blockquote>
-                    </details>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+                    </li>
+                  );
+                })}
+                {streamingReply && streaming && (
+                  <li key="streaming">
+                    <AssistantReply
+                      reply={streamingReply}
+                      pending
+                      stage={streaming.stage}
+                      expectCards={llmMode === 'offline'}
+                      libraryDocs={libraryDocs}
+                    />
+                  </li>
+                )}
+              </ol>
+            </div>
+          )}
 
-      {(risk === 'HIGH' || risk === 'CRITICAL') && !pending && (
-        <AdvocateCta category={category} advocates={advocates} />
-      )}
-    </article>
-  );
-}
+          {failure && (
+            <div
+              ref={failureRef}
+              className={`alert ${failureClass} ${styles.failure}`}
+              role={failure.kind === 'stopped' ? 'status' : 'alert'}
+            >
+              {failure.kind === 'stopped' ? <InfoIcon /> : <AlertIcon />}
+              <div>
+                <p className="alert-title">{failure.title}</p>
+                <p>{failure.message}</p>
+                <div className={styles.failureActions}>
+                  {failure.retryText && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => void handleSend(failure.retryText)}
+                    >
+                      <RefreshIcon />
+                      Try again
+                    </button>
+                  )}
+                  {failure.needsLogin && (
+                    <Link href="/login" className="btn btn-primary btn-sm">
+                      Log in
+                    </Link>
+                  )}
+                  {failure.keptText ? (
+                    <button
+                      type="button"
+                      className={`btn btn-ghost btn-sm ${failure.retryText || failure.needsLogin ? '' : '-ml-3'}`}
+                      onClick={editFailedQuestion}
+                    >
+                      Edit question
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`btn btn-ghost btn-sm ${failure.retryText || failure.needsLogin ? '' : '-ml-3'}`}
+                      onClick={() => setFailure(null)}
+                    >
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
-function AdvocateCta({
-  category,
-  advocates,
-}: {
-  category: string | null;
-  advocates: RecommendedAdvocate[];
-}) {
-  const href = category ? `/advocates?practice_area=${encodeURIComponent(category)}` : '/advocates';
-  return (
-    <section
-      aria-label="Advocate recommendation"
-      className="border-line mt-4 rounded-lg border p-3 sm:p-4"
-    >
-      <p className="text-sm font-semibold">
-        This matter may require professional legal assistance.
-      </p>
-      {advocates.length > 0 ? (
-        <>
-          <p className="muted mt-0.5 text-xs">
-            Advocates in the directory who practise in this area
-            {advocates.some((a) => a.same_state) ? ', nearest your state first' : ''}:
+          <p className={styles.disclaimer} style={{ marginTop: 'auto', paddingTop: '1rem' }}>
+            {disclaimer}
           </p>
-          <ul className="mt-2 flex flex-col gap-2">
-            {advocates.map((a) => (
-              <li key={a.id} className="text-sm">
-                <Link href={`/advocates/${a.id}`} className="link font-medium">
-                  {a.display_name ?? 'Advocate'}
-                </Link>
-                <span className="subtle text-xs">
-                  {' '}
-                  · {formatEnumLabel(a.matched_area)} · {a.city}, {stateName(a.state_code)}
-                  {a.experience_years !== null ? ` · ${a.experience_years} yrs` : ''}
-                  {a.is_sample ? ' · sample listing' : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        <p className="muted mt-0.5 text-xs">
-          No listed advocate matched this area yet; you can still browse the directory.
-        </p>
-      )}
-      <Link href={href} className="btn btn-primary mt-3 inline-flex text-sm">
-        Find an Advocate
-      </Link>
-    </section>
+        </div>
+
+        <div className={styles.dock}>
+          <div className={styles.column}>
+            <Composer
+              value={input}
+              onChange={(v) => {
+                setInput(v);
+                if (emptyHint) setEmptyHint(false);
+              }}
+              onSend={() => void handleSend()}
+              onStop={handleStop}
+              sending={sending}
+              showEmptyHint={emptyHint}
+              inputRef={inputRef}
+            />
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }

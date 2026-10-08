@@ -1,0 +1,291 @@
+/*
+ * Home page styling that the shared design system has no class for. Tokens only
+ * (theme-aware); no raw colours. Everything here follows the light and dark
+ * themes and collapses to one column on phones.
+ */
+
+/* ---- Hero ---------------------------------------------------------------- */
+
+.proof {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.proof li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.proof svg {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-accent);
+}
+
+/* ---- Tool tiles ------------------------------------------------------------ */
+
+.bento {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .bento {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+  .tileChat {
+    grid-row: span 2;
+  }
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  height: 100%;
+  padding: 1.5rem;
+}
+
+.tileHead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.iconTile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius-item);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.iconTile svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.points svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.2rem;
+  color: var(--color-ok);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: auto;
+  padding-top: 0.25rem;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.cta svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  transition: transform var(--dur) var(--ease-out-soft);
+}
+
+.tile:hover .cta svg {
+  transform: translateX(3px);
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The layout of a reply, drawn with neutral bars (an illustration, not data). */
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: auto;
+  padding: 1rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-sunken);
+}
+
+.replyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bar {
+  display: block;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-line-strong);
+}
+
+.replyRule {
+  height: 1px;
+  background: var(--color-line);
+}
+
+.replyCaption {
+  margin: 0;
+  color: var(--color-fg-subtle);
+  font-size: var(--text-xs);
+}
+
+.sourceRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.sourceRow .lines {
+  flex: 1;
+}
+
+.people {
+  display: flex;
+}
+
+.person {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: -0.4rem;
+  border: 2px solid var(--color-sunken);
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  box-shadow: 0 0 0 1px var(--color-accent-line);
+}
+
+.person:first-child {
+  margin-left: 0;
+}
+
+/* ---- How an answer is produced ---------------------------------------------- */
+
+.steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  padding: 0 0 2rem 3.5rem;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: 50%;
+  background: var(--color-elevated);
+  color: var(--color-accent-strong);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-raised);
+}
+
+/* The rail between two steps. */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 2.5rem;
+  bottom: 0;
+  left: 1.25rem;
+  width: 1px;
+  background: var(--color-line-strong);
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mode {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.mode :global(.tag) {
+  flex: none;
+  justify-content: center;
+  min-width: 3.9rem;
+}
+
+@media (min-width: 1024px) {
+  .steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0 2rem;
+  }
+  .step {
+    padding: 3.75rem 0 0;
+  }
+  .step:not(:last-child)::before {
+    top: 1.25rem;
+    right: -1.25rem;
+    bottom: auto;
+    left: 3.25rem;
+    width: auto;
+    height: 1px;
+  }
+}

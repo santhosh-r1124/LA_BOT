@@ -91,14 +91,22 @@ export const advocateClient = {
 
   get: (advocateId: string) => apiFetch<AdvocateDirectoryEntry>(`/api/v1/advocates/${advocateId}`),
 
-  /** Admin-only CSV upload (multipart, so not via apiFetch's JSON body). */
-  async importCsv(file: File, token: string, dryRun: boolean): Promise<AdvocateImportReport> {
+  /**
+   * Admin-only CSV upload (multipart, so not via apiFetch's JSON body).
+   * `isSample` marks every created row as a synthetic sample listing.
+   */
+  async importCsv(
+    file: File,
+    token: string,
+    dryRun: boolean,
+    isSample = false,
+  ): Promise<AdvocateImportReport> {
     const form = new FormData();
     form.append('file', file);
     let response: Response;
     try {
       response = await fetch(
-        `${env.NEXT_PUBLIC_API_BASE_URL}/api/v1/admin/advocates/import?dry_run=${dryRun}`,
+        `${env.NEXT_PUBLIC_API_BASE_URL}/api/v1/admin/advocates/import?dry_run=${dryRun}&is_sample=${isSample}`,
         { method: 'POST', body: form, headers: { Authorization: `Bearer ${token}` } },
       );
     } catch {
