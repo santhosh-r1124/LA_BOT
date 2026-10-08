@@ -60,6 +60,14 @@ services:
       OPEN_LOGIN: ${OPEN_LOGIN:-true}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@labot.local}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_DATASET_NAME: ${HF_DATASET_NAME:-Sumitedu/indian-case-laws}
+      HF_DATASET_SPLIT: ${HF_DATASET_SPLIT:-}
+      HF_DATASET_FILE: ${HF_DATASET_FILE:-}
+      HF_MAX_DOCUMENTS: ${HF_MAX_DOCUMENTS:-200}
+      HF_BATCH_SIZE: ${HF_BATCH_SIZE:-20}
+      LEGAL_CORPUS_AUTOLOAD: ${LEGAL_CORPUS_AUTOLOAD:-true}
+      LEGAL_CORPUS_EMBED_ON_START: ${LEGAL_CORPUS_EMBED_ON_START:-true}
     restart: unless-stopped
 
 volumes:

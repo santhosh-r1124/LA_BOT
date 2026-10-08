@@ -24,6 +24,7 @@ from app.core.legal_text import (
     ADVOCATE_RECOMMENDATION_MESSAGE,
     INSUFFICIENT_EVIDENCE_MESSAGE,
     MANDATORY_DISCLAIMER,
+    NO_RELEVANT_SOURCES_NOTICE,
     OUT_OF_SCOPE_MESSAGE,
 )
 from app.core.logging import get_logger
@@ -83,13 +84,17 @@ async def _retrieve(message: str, *, db: DbSession, settings: SettingsDep) -> li
 
 
 def _source_dict(chunk: RetrievedChunk) -> dict[str, object]:
-    return {
+    source: dict[str, object] = {
         "document_id": str(chunk.document_id),
         "document_title": chunk.document_title,
         "section": chunk.section,
         "article": chunk.article,
         "source_url": chunk.source_url,
     }
+    for key in ("court", "date", "citation", "dataset"):
+        if chunk.metadata.get(key):
+            source[key] = str(chunk.metadata[key])
+    return source
 
 
 @dataclass(slots=True)
@@ -206,8 +211,11 @@ async def send_message(
             payload.message, history=turn.history, context=turn.retrieved, settings=settings
         )
     else:
-        answer_text = await llm_service.generate_general_answer(
-            payload.message, history=turn.history, settings=settings
+        answer_text = (
+            f"{NO_RELEVANT_SOURCES_NOTICE}\n\n"
+            + await llm_service.generate_general_answer(
+                payload.message, history=turn.history, settings=settings
+            )
         )
     return await _finalize_turn(turn, answer_text + turn.advocate_suffix, db=db)
 
@@ -268,6 +276,10 @@ async def send_message_stream(
             yield _sse("delta", {"text": answer_text})
         else:
             parts: list[str] = []
+            if not turn.retrieved:
+                notice = f"{NO_RELEVANT_SOURCES_NOTICE}\n\n"
+                parts.append(notice)
+                yield _sse("delta", {"text": notice})
             try:
                 async for delta in _answer_stream(turn, payload.message, settings=settings):
                     parts.append(delta)

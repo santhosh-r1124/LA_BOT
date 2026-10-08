@@ -43,8 +43,11 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-for-production-use-01234567
 # Real credential checks unless a test opts into open login (see test_auth.py).
 os.environ.setdefault("OPEN_LOGIN", "false")
 os.environ.setdefault("ADVOCATES_CSV_PATH", "")
-for _key in ("ADMIN_EMAIL", "ADMIN_PASSWORD"):
+for _key in ("ADMIN_EMAIL", "ADMIN_PASSWORD", "HF_TOKEN", "HF_DATASET_FILE"):
     os.environ.setdefault(_key, "")
+# Never reach Hugging Face from the test suite.
+os.environ.setdefault("LEGAL_CORPUS_AUTOLOAD", "false")
+os.environ.setdefault("LEGAL_CORPUS_EMBED_ON_START", "false")
 
 
 def unique_email(prefix: str = "test") -> str:

@@ -13,10 +13,11 @@ from sqlalchemy import func, select
 from app.api.deps import DbSession, SettingsDep
 from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger
-from app.models.legal_document import IngestionStatus, LegalDocument
+from app.models.legal_document import IngestionStatus, LegalChunk, LegalDocument
 from app.models.user import AdvocateProfile, VerificationStatus
 from app.services.llm_provider import describe_provider, get_provider, provider_health
 from app.services.rate_limit import AIRateLimit
+from app.services.startup import corpus_load
 
 router = APIRouter()
 logger = get_logger("app.meta")
@@ -55,18 +56,40 @@ class EmbeddingStatus(BaseModel):
     model: str | None
 
 
+class DatasetCount(BaseModel):
+    dataset: str
+    """Where the documents came from: a Hugging Face dataset id, or "official
+    sources" for the government texts loaded by seed_corpus."""
+    documents: int
+
+
+class CorpusLoadStatus(BaseModel):
+    """The background Hugging Face load started with the API."""
+
+    state: str
+    dataset: str | None
+    message: str | None
+    updated_at: datetime | None
+
+
 class KnowledgeBaseStatus(BaseModel):
     available: bool
     """False when the database couldn't be queried — counts are then null."""
     documents_indexed: int | None
     documents_failed: int | None
     chunks_indexed: int | None
+    chunks_embedded: int | None = None
+    """Chunks usable for semantic (vector) search; the rest are keyword-only."""
     last_indexed_at: datetime | None
+    sources: list[DatasetCount] = []
+    corpus_load: CorpusLoadStatus | None = None
 
 
 class DirectoryStatus(BaseModel):
     available: bool
     verified_advocates: int | None
+    """All listed advocates, including sample (synthetic demo) listings."""
+    sample_advocates: int | None = None
 
 
 class FeatureFlags(BaseModel):
@@ -115,22 +138,48 @@ async def read_status(settings: SettingsDep, db: DbSession) -> StatusResponse:
                 )
             )
         ).one()
+        embedded = await db.scalar(
+            select(func.count()).select_from(LegalChunk).where(LegalChunk.embedding.is_not(None))
+        )
+        per_source = (
+            await db.execute(
+                select(LegalDocument.source_dataset, func.count())
+                .where(completed)
+                .group_by(LegalDocument.source_dataset)
+                .order_by(func.count().desc())
+            )
+        ).all()
         kb = KnowledgeBaseStatus(
             available=True,
             documents_indexed=int(row[0]),
             documents_failed=int(row[1]),
             chunks_indexed=int(row[2]),
+            chunks_embedded=int(embedded or 0),
             last_indexed_at=row[3],
+            sources=[
+                DatasetCount(dataset=name or "official sources", documents=int(count))
+                for name, count in per_source
+            ],
         )
-        verified = await db.scalar(
-            select(func.count())
-            .select_from(AdvocateProfile)
-            .where(AdvocateProfile.verification_status == VerificationStatus.VERIFIED)
+        verified, sample = (
+            await db.execute(
+                select(func.count(), func.count().filter(AdvocateProfile.is_sample))
+                .select_from(AdvocateProfile)
+                .where(AdvocateProfile.verification_status == VerificationStatus.VERIFIED)
+            )
+        ).one()
+        directory = DirectoryStatus(
+            available=True, verified_advocates=int(verified), sample_advocates=int(sample)
         )
-        directory = DirectoryStatus(available=True, verified_advocates=int(verified or 0))
     except Exception as exc:  # report, don't 500 — the page shows "unavailable"
         logger.warning("status_db_query_failed", error_type=type(exc).__name__)
 
+    kb.corpus_load = CorpusLoadStatus(
+        state=corpus_load.state,
+        dataset=corpus_load.dataset,
+        message=corpus_load.message,
+        updated_at=corpus_load.updated_at,
+    )
     return StatusResponse(
         generated_at=datetime.now(UTC),
         llm=LLMStatus(

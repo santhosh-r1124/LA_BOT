@@ -5,10 +5,17 @@ accepted). Required: a name, a state and a city, plus an email or an id.
 Optional: phone, practice area(s), language(s), experience, fee, bio. Cells
 holding several values separate them with ``;``, ``|``, ``/`` or ``,``.
 
+State and language codes are stored exactly as written in the file (TN
+stays TN, ta stays ta; see app/core/india.py); full names ("Tamil Nadu",
+"Tamil") are converted to codes. Practice-area names map one-to-one onto the
+platform's category codes ("Cyber Law" -> CYBER_LAW).
+
 Rows are upserted, never deleted: a row matches an existing advocate by its
 id column (stored as ``AdvocateProfile.external_id``), else by email. New
 advocates are listed as VERIFIED; an existing advocate's verification status
-is left alone so an admin's rejection survives a re-import.
+is left alone so an admin's rejection survives a re-import. ``is_sample``
+marks synthetic demo records so the directory never presents them as real
+advocates.
 
 Imported accounts get an unusable password, so they can't sign in until the
 advocate sets one through "forgot password".
@@ -29,7 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.india import normalize_language, normalize_state
+from app.core.india import parse_language_code, parse_state_code
 from app.core.logging import get_logger
 from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
 from app.services.legal_classifier import LEGAL_CATEGORIES
@@ -191,10 +198,14 @@ def _parse_row(line: int, record: dict[str, Any], cols: dict[str, str]) -> Advoc
         else:
             email = f"{_norm_key(external_id)}@{_NO_EMAIL_DOMAIN}"
 
-    state_raw = cell("state")
-    state_code = normalize_state(state_raw) if state_raw else None
-    if state_code is None:
-        problems.append(f"unknown state {state_raw!r}" if state_raw else "state is empty")
+    state_code: str | None = None
+    if state_raw := cell("state"):
+        try:
+            state_code = parse_state_code(state_raw)
+        except ValueError as exc:
+            problems.append(str(exc))
+    else:
+        problems.append("state is empty")
 
     city = cell("city")
     if not city:
@@ -210,10 +221,12 @@ def _parse_row(line: int, record: dict[str, Any], cols: dict[str, str]) -> Advoc
 
     languages: list[str] = []
     for part in _split_multi(cell("languages")):
-        lang = normalize_language(part)
-        if lang is None:
-            problems.append(f"unknown language {part!r}")
-        elif lang not in languages:
+        try:
+            lang = parse_language_code(part)
+        except ValueError as exc:
+            problems.append(str(exc))
+            continue
+        if lang not in languages:
             languages.append(lang)
 
     experience_years: int | None = None
@@ -306,7 +319,9 @@ def _apply(obj: object, values: dict[str, Any]) -> bool:
     return changed
 
 
-async def import_rows(db: AsyncSession, rows: list[AdvocateRow], report: ImportReport) -> None:
+async def import_rows(
+    db: AsyncSession, rows: list[AdvocateRow], report: ImportReport, *, is_sample: bool = False
+) -> None:
     """Upsert parsed rows into ``report``'s counters. The caller commits."""
     ids = [r.external_id for r in rows if r.external_id]
     by_external_id: dict[str, AdvocateProfile] = {}
@@ -349,6 +364,7 @@ async def import_rows(db: AsyncSession, rows: list[AdvocateRow], report: ImportR
             "languages": row.languages,
             "phone": row.phone,
             "external_id": row.external_id,
+            "is_sample": is_sample,
         }
         # Optional columns only overwrite when the file actually has a value.
         for name in ("experience_years", "consultation_fee", "bio"):
@@ -394,11 +410,11 @@ async def import_rows(db: AsyncSession, rows: list[AdvocateRow], report: ImportR
     await db.flush()
 
 
-async def import_csv_text(db: AsyncSession, text: str) -> ImportReport:
+async def import_csv_text(db: AsyncSession, text: str, *, is_sample: bool = False) -> ImportReport:
     rows, errors = parse_csv(text)
     report = ImportReport(total_rows=len(rows) + len(errors), errors=errors)
     if rows:
-        await import_rows(db, rows, report)
+        await import_rows(db, rows, report, is_sample=is_sample)
     report.errors.sort(key=lambda e: e.line)
     return report
 
@@ -413,12 +429,12 @@ def summarize(report: ImportReport) -> str:
     return text
 
 
-async def import_csv_file(path: Path) -> ImportReport:
+async def import_csv_file(path: Path, *, is_sample: bool = False) -> ImportReport:
     """Import a file in its own session and commit (startup seeding, CLI)."""
     from app.db.session import get_sessionmaker
 
     text = await asyncio.to_thread(path.read_text, encoding="utf-8-sig")
     async with get_sessionmaker()() as db:
-        report = await import_csv_text(db, text)
+        report = await import_csv_text(db, text, is_sample=is_sample)
         await db.commit()
     return report

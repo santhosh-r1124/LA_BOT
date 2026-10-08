@@ -98,10 +98,19 @@ class AdvocateProfile(TimestampMixin, Base):
     # Simple weekly-slot availability, e.g. {"mon": ["10:00-13:00"], ...}. Refined in Phase 8.
     availability: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     phone: Mapped[str | None] = mapped_column(String(32))
+    # Synthetic demo record (e.g. the bundled sample CSV): listed, but always
+    # labelled as sample data, never presented as a real advocate.
+    is_sample: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     # Identifier from a bulk-import source file (app/services/advocate_import.py).
     external_id: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
 
     user: Mapped[User] = relationship(back_populates="advocate_profile")
+
+    __table_args__ = (
+        Index("ix_advocate_profiles_state_code", "state_code"),
+        Index("ix_advocate_profiles_practice_areas", "practice_areas", postgresql_using="gin"),
+        Index("ix_advocate_profiles_languages", "languages", postgresql_using="gin"),
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"AdvocateProfile(user_id={self.user_id!s}, status={self.verification_status})"

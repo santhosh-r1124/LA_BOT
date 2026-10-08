@@ -22,6 +22,11 @@ class SourceOut(BaseModel):
     section: str | None
     article: str | None
     source_url: str
+    # Present only when the source dataset provides them.
+    court: str | None = None
+    date: str | None = None
+    citation: str | None = None
+    dataset: str | None = None
 
 
 class ChatMessageOut(BaseModel):

@@ -160,6 +160,33 @@ class Settings(BaseSettings):
     # CSV of advocates imported (upserted) into the directory on every start;
     # path relative to apps/api. Empty string disables it.
     advocates_csv_path: str = "data/advocates.csv"
+    # The bundled file is synthetic demo data: its listings are labelled
+    # "sample" and never presented as real advocates.
+    advocates_csv_is_sample: bool = True
+    # ---- Legal corpus from Hugging Face ------------------------------------
+    # Real Indian judgments read from a Hugging Face dataset into the knowledge
+    # base (app.services.ingestion.hf_dataset; CLI: app.scripts.ingest_hf_dataset).
+    # Public datasets need no token; gated ones need HF_TOKEN (read access).
+    hf_token: str | None = None
+    hf_dataset_name: str = "Sumitedu/indian-case-laws"
+    # Viewer config/split; empty picks "default"/"train".
+    hf_dataset_config: str | None = None
+    hf_dataset_split: str | None = None
+    # A parquet/.jsonl file in the dataset repo to read directly. Empty: use the
+    # dataset viewer, or pick a file automatically when the viewer can't serve it.
+    hf_dataset_file: str | None = None
+    # How many documents from the dataset to keep indexed (0 = none).
+    hf_max_documents: int = Field(default=200, ge=0, le=1_000_000)
+    hf_batch_size: int = Field(default=20, ge=1, le=100)
+    # Column overrides when automatic detection picks the wrong one.
+    hf_text_field: str | None = None
+    hf_title_field: str | None = None
+    # On API start, ingest up to HF_MAX_DOCUMENTS in the background (skipped
+    # when that many are already indexed), then embed chunks that have no
+    # embedding yet if GEMINI_API_KEY is set.
+    legal_corpus_autoload: bool = True
+    legal_corpus_embed_on_start: bool = True
+
     # When both are set, this account is created/kept as an ADMIN on startup
     # (it can upload advocate CSVs at /advocates/import).
     admin_email: str | None = None
@@ -181,6 +208,22 @@ class Settings(BaseSettings):
                 return json.loads(stripped)
             return [item.strip() for item in stripped.split(",") if item.strip()]
         return value
+
+    @field_validator(
+        "hf_token",
+        "hf_dataset_config",
+        "hf_dataset_split",
+        "hf_dataset_file",
+        "hf_text_field",
+        "hf_title_field",
+        mode="before",
+    )
+    @classmethod
+    def _blank_is_unset(cls, value: object) -> object:
+        """``HF_TOKEN=`` in .env means "not set", not an empty token."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("database_url", mode="after")
     @classmethod

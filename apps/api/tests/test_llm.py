@@ -153,3 +153,29 @@ async def test_generate_grounded_answer_includes_numbered_sources_in_the_prompt(
     assert "[1]" in prompt
     assert SAMPLE_CHUNK.document_title in prompt
     assert SAMPLE_CHUNK.content in prompt
+
+
+def test_context_shows_dataset_citation_details_only_when_present() -> None:
+    with_meta = RetrievedChunk(
+        chunk_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        document_title="Fixture A v. Fixture B",
+        source_url="https://example.com",
+        section=None,
+        article=None,
+        content="Body.",
+        metadata={"court": "Test Court", "date": "2020-01-02", "dataset": "example/cases"},
+    )
+    without = RetrievedChunk(
+        chunk_id=uuid.uuid4(),
+        document_id=uuid.uuid4(),
+        document_title="Test Act, 2000",
+        source_url="https://example.com",
+        section="4",
+        article=None,
+        content="Body.",
+    )
+    text = llm._format_context([with_meta, without])
+    assert "[1] Fixture A v. Fixture B (court: Test Court; date: 2020-01-02)" in text
+    assert "[2] Test Act, 2000, Section 4\n" in text
+    assert "citation" not in text

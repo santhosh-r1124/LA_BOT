@@ -93,10 +93,14 @@ async def test_search_filters_by_state_and_city(
         db_client, db_txn_session, state_code="ka", city="Bengaluru", display_name="Blr Advocate"
     )
 
-    resp = await db_client.get("/api/v1/advocates", params={"state_code": "mh"})
+    resp = await db_client.get("/api/v1/advocates", params={"state_code": "MH"})
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
     assert resp.json()["items"][0]["display_name"] == "Pune Advocate"
+
+    # Codes are case-sensitive: a lower-case code is rejected, not guessed at.
+    lower = await db_client.get("/api/v1/advocates", params={"state_code": "mh"})
+    assert lower.status_code == 422
 
     resp = await db_client.get("/api/v1/advocates", params={"city": "pune"})
     assert resp.status_code == 200

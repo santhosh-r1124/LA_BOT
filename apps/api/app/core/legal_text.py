@@ -17,6 +17,13 @@ INSUFFICIENT_EVIDENCE_MESSAGE = (
 )
 
 # Appended to responses for HIGH/CRITICAL risk queries (Phase 5 — risk engine).
+# Opens every general-knowledge reply (no indexed source matched), so neither
+# the user nor an API client can mistake it for a source-backed answer.
+NO_RELEVANT_SOURCES_NOTICE = (
+    "I couldn't find sufficiently relevant material in the legal library for this "
+    "question, so this is general information only, not drawn from any source document."
+)
+
 ADVOCATE_RECOMMENDATION_MESSAGE = "This matter may require advice from a qualified advocate."
 
 # Returned in place of a generated answer when the classifier flags is_out_of_scope.

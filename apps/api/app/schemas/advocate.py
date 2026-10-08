@@ -90,6 +90,8 @@ class AdvocateDirectoryEntry(BaseModel):
     availability: dict[str, object] | None
     email: str | None = None
     phone: str | None = None
+    is_sample: bool = False
+    """Synthetic demo listing (e.g. the bundled sample CSV), not a real advocate."""
 
 
 class PaginatedAdvocateDirectory(BaseModel):
@@ -97,3 +99,22 @@ class PaginatedAdvocateDirectory(BaseModel):
     total: int
     limit: int
     offset: int
+    page: int
+    page_size: int
+
+
+class FacetValue(BaseModel):
+    code: str
+    label: str
+    count: int
+
+
+class AdvocateFacets(BaseModel):
+    """Filter values that actually occur among listed advocates, with counts."""
+
+    total: int
+    sample_count: int
+    practice_areas: list[FacetValue]
+    states: list[FacetValue]
+    languages: list[FacetValue]
+    cities: list[FacetValue]

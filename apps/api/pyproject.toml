@@ -25,6 +25,7 @@ dependencies = [
     "pypdf>=5.1.0",
     "beautifulsoup4>=4.12.3",
     "httpx>=0.28.1",
+    "pyarrow>=18.1.0",
 ]
 
 [dependency-groups]
@@ -92,5 +93,5 @@ disallow_untyped_decorators = false
 exclude = ["migrations/", "tests/"]
 
 [[tool.mypy.overrides]]
-module = ["asyncpg.*"]
+module = ["asyncpg.*", "pyarrow.*"]
 ignore_missing_imports = true

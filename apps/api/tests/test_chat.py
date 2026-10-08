@@ -19,6 +19,7 @@ from httpx import AsyncClient
 from app.core.legal_text import (
     ADVOCATE_RECOMMENDATION_MESSAGE,
     INSUFFICIENT_EVIDENCE_MESSAGE,
+    NO_RELEVANT_SOURCES_NOTICE,
     OUT_OF_SCOPE_MESSAGE,
 )
 from app.services import legal_classifier
@@ -140,6 +141,11 @@ async def test_anonymous_user_can_chat(
             "section": FAKE_CHUNK.section,
             "article": FAKE_CHUNK.article,
             "source_url": FAKE_CHUNK.source_url,
+            # Only filled for dataset documents that carry them; never inferred.
+            "court": None,
+            "date": None,
+            "citation": None,
+            "dataset": None,
         }
     ]
     assert body["disclaimer"]
@@ -243,7 +249,11 @@ async def test_no_sources_gets_a_general_answer_by_default(
     resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["assistant_message"]["content"] == "An affidavit is a sworn statement."
+    # Says up front that nothing relevant was retrieved, so the answer can't
+    # be mistaken for one drawn from a legal document.
+    assert body["assistant_message"]["content"] == (
+        f"{NO_RELEVANT_SOURCES_NOTICE}\n\nAn affidavit is a sworn statement."
+    )
     assert body["assistant_message"]["sources"] == []  # the UI labels this "general information"
     assert calls == ["What is an affidavit?"]
     assert grounded_called is False
@@ -263,7 +273,9 @@ async def test_retrieval_unavailable_still_gets_a_general_answer(
 
     resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
     assert resp.status_code == 200
-    assert resp.json()["assistant_message"]["content"] == "General info."
+    assert resp.json()["assistant_message"]["content"] == (
+        f"{NO_RELEVANT_SOURCES_NOTICE}\n\nGeneral info."
+    )
 
 
 async def test_out_of_scope_short_circuits_generation(
@@ -474,10 +486,13 @@ async def test_stream_no_sources_streams_a_general_answer(
     events = _parse_sse(resp.text)
     assert events[0][1]["sources"] == []
     assert [e for e in events if e[0] == "delta"] == [
+        ("delta", {"text": f"{NO_RELEVANT_SOURCES_NOTICE}\n\n"}),
         ("delta", {"text": "General "}),
         ("delta", {"text": "answer."}),
     ]
-    assert events[-1][1]["assistant_message"]["content"] == "General answer."  # type: ignore[index]
+    assert events[-1][1]["assistant_message"]["content"] == (  # type: ignore[index]
+        f"{NO_RELEVANT_SOURCES_NOTICE}\n\nGeneral answer."
+    )
 
 
 async def test_stream_generation_failure_emits_error_and_persists_nothing(

@@ -1,5 +1,11 @@
-"""Indian states/UTs and languages: display names and lenient parsing of
-user- or file-supplied values (codes, names, common legacy codes)."""
+"""Indian states/UTs and languages: codes, display names, and parsing of
+user- or file-supplied values.
+
+State codes follow the convention used by the advocate data (TN, TS, OD,
+CG, UK, GO, ...). The ISO 3166-2:IN variants that differ (CT, GA, OR, TG,
+UT) are accepted too. Whatever valid code a file uses is stored exactly as
+written: codes are case-sensitive and never rewritten into another code.
+"""
 
 from __future__ import annotations
 
@@ -11,14 +17,14 @@ STATE_NAMES: dict[str, str] = {
     "AS": "Assam",
     "BR": "Bihar",
     "CH": "Chandigarh",
-    "CT": "Chhattisgarh",
+    "CG": "Chhattisgarh",
     "DN": "Dadra and Nagar Haveli and Daman and Diu",
     "DL": "Delhi",
-    "GA": "Goa",
+    "GO": "Goa",
     "GJ": "Gujarat",
     "HR": "Haryana",
     "HP": "Himachal Pradesh",
-    "JK": "Jammu and Kashmir",
+    "JK": "Jammu & Kashmir",
     "JH": "Jharkhand",
     "KA": "Karnataka",
     "KL": "Kerala",
@@ -30,36 +36,37 @@ STATE_NAMES: dict[str, str] = {
     "ML": "Meghalaya",
     "MZ": "Mizoram",
     "NL": "Nagaland",
-    "OR": "Odisha",
+    "OD": "Odisha",
     "PY": "Puducherry",
     "PB": "Punjab",
     "RJ": "Rajasthan",
     "SK": "Sikkim",
     "TN": "Tamil Nadu",
-    "TG": "Telangana",
+    "TS": "Telangana",
     "TR": "Tripura",
     "UP": "Uttar Pradesh",
-    "UT": "Uttarakhand",
+    "UK": "Uttarakhand",
     "WB": "West Bengal",
 }
-# Vehicle-registration and older ISO codes seen in real-world data.
-_STATE_CODE_ALIASES = {
-    "CG": "CT",
-    "GO": "GA",
-    "OD": "OR",
-    "TS": "TG",
-    "UK": "UT",
-    "UA": "UT",
-    "DD": "DN",
+# ISO 3166-2:IN codes that differ from the convention above. Valid and kept
+# as written (a file using CT keeps CT), they just aren't the default.
+LEGACY_STATE_NAMES: dict[str, str] = {
+    "CT": "Chhattisgarh",
+    "GA": "Goa",
+    "OR": "Odisha",
+    "TG": "Telangana",
+    "UT": "Uttarakhand",
 }
+ALL_STATE_NAMES: dict[str, str] = {**STATE_NAMES, **LEGACY_STATE_NAMES}
+
 _STATE_NAME_ALIASES = {
-    "orissa": "OR",
+    "orissa": "OD",
     "pondicherry": "PY",
-    "uttaranchal": "UT",
+    "uttaranchal": "UK",
     "new delhi": "DL",
     "nct of delhi": "DL",
     "j&k": "JK",
-    "jammu & kashmir": "JK",
+    "jammu and kashmir": "JK",
 }
 
 # Mirrors packages/shared/src/legal.ts (LANGUAGE_NAMES).
@@ -87,30 +94,52 @@ LANGUAGE_NAMES: dict[str, str] = {
 _LANGUAGE_ALIASES = {"oriya": "or", "bangla": "bn", "panjabi": "pa"}
 
 
-def normalize_state(value: str) -> str | None:
-    raw = value.strip()
-    code = raw.upper()
-    if code in STATE_NAMES:
-        return code
-    if code in _STATE_CODE_ALIASES:
-        return _STATE_CODE_ALIASES[code]
-    name = " ".join(raw.lower().replace("&", " & ").split())
+def _state_from_name(value: str) -> str | None:
+    name = " ".join(value.lower().replace("&", " & ").split())
     if name in _STATE_NAME_ALIASES:
         return _STATE_NAME_ALIASES[name]
     name = name.replace(" & ", " and ")
-    for state_code, state_name in STATE_NAMES.items():
-        if state_name.lower() == name:
-            return state_code
+    for code, state_name in STATE_NAMES.items():
+        if state_name.lower().replace(" & ", " and ") == name:
+            return code
     return None
 
 
-def normalize_language(value: str) -> str | None:
-    key = value.strip().lower()
-    if key in LANGUAGE_NAMES:
-        return key
+def parse_state_code(value: str) -> str:
+    """Strict parsing for stored data (CSV import). Returns the code exactly
+    as written when it is a valid upper-case code, or the code for a full
+    state name. Raises ``ValueError`` with a user-facing reason otherwise."""
+    raw = value.strip()
+    if raw in ALL_STATE_NAMES:
+        return raw
+    if raw.upper() in ALL_STATE_NAMES and len(raw) == 2:
+        raise ValueError(f"state code {raw!r} must be upper-case ({raw.upper()!r})")
+    if code := _state_from_name(raw):
+        return code
+    raise ValueError(f"unknown state {raw!r}")
+
+
+def normalize_state(value: str) -> str | None:
+    """Lenient parsing for free-text answers ("tn", "Tamil Nadu"): the
+    upper-cased code if valid, the code for a state name, else ``None``."""
+    raw = value.strip()
+    if raw.upper() in ALL_STATE_NAMES:
+        return raw.upper()
+    return _state_from_name(raw) if raw else None
+
+
+def parse_language_code(value: str) -> str:
+    """Strict parsing for stored data: the code exactly as written when it is
+    a valid lower-case code, or the code for a language name."""
+    raw = value.strip()
+    if raw in LANGUAGE_NAMES:
+        return raw
+    if raw.lower() in LANGUAGE_NAMES:
+        raise ValueError(f"language code {raw!r} must be lower-case ({raw.lower()!r})")
+    key = raw.lower()
     if key in _LANGUAGE_ALIASES:
         return _LANGUAGE_ALIASES[key]
     for code, name in LANGUAGE_NAMES.items():
         if name.lower() == key:
             return code
-    return None
+    raise ValueError(f"unknown language {raw!r}")

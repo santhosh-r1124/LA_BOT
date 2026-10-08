@@ -152,8 +152,13 @@ _MAX_IMPORT_BYTES = 5 * 1024 * 1024
     summary="Import advocates from a CSV file (add or update, never delete)",
 )
 async def import_advocates(
-    file: UploadFile, _admin: AdminUser, db: DbSession, dry_run: bool = False
+    file: UploadFile,
+    _admin: AdminUser,
+    db: DbSession,
+    dry_run: bool = False,
+    is_sample: bool = False,
 ) -> AdvocateImportReport:
+    """``is_sample=true`` marks the rows as synthetic demo listings."""
     raw = await file.read(_MAX_IMPORT_BYTES + 1)
     if len(raw) > _MAX_IMPORT_BYTES:
         raise ValidationAppError("The file is larger than 5 MB.", code="file_too_large")
@@ -167,7 +172,7 @@ async def import_advocates(
     # A savepoint lets a dry run undo exactly the import's writes.
     savepoint = await db.begin_nested()
     try:
-        report = await advocate_import.import_csv_text(db, text)
+        report = await advocate_import.import_csv_text(db, text, is_sample=is_sample)
     except advocate_import.CsvFormatError as exc:
         await savepoint.rollback()
         raise ValidationAppError(str(exc), code="bad_csv") from exc

@@ -10,15 +10,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.core import security
+from app.core.india import parse_language_code, parse_state_code
 from app.models.user import AdvocateProfile, User, UserRole, VerificationStatus
 from app.services import advocate_import
-from app.services.advocate_import import (
-    CsvFormatError,
-    normalize_language,
-    normalize_practice_area,
-    normalize_state,
-    parse_csv,
-)
+from app.services.advocate_import import CsvFormatError, normalize_practice_area, parse_csv
 from tests.test_admin import _admin_headers
 
 HEADER = "advocate_id,name,email,phone,practice_area,state,city,language_code\n"
@@ -40,21 +35,34 @@ def _uid() -> str:
 @pytest.mark.parametrize(
     ("raw", "code"),
     [
+        # Codes are kept exactly as written, including both Chhattisgarh codes.
         ("TN", "TN"),
-        ("tn", "TN"),
-        ("CG", "CT"),  # vehicle-registration code for Chhattisgarh
-        ("GO", "GA"),
-        ("OD", "OR"),
-        ("TS", "TG"),
-        ("UK", "UT"),
+        ("TS", "TS"),
+        ("CG", "CG"),
+        ("CT", "CT"),
+        ("GO", "GO"),
+        ("OD", "OD"),
+        ("UK", "UK"),
+        ("CH", "CH"),
+        (" KA ", "KA"),
+        # Full names become the code.
         ("Tamil Nadu", "TN"),
+        ("Telangana", "TS"),
         ("jammu & kashmir", "JK"),
-        ("Orissa", "OR"),
-        ("Narnia", None),
+        ("Orissa", "OD"),
     ],
 )
-def test_normalize_state(raw: str, code: str | None) -> None:
-    assert normalize_state(raw) == code
+def test_parse_state_code_keeps_codes_exactly(raw: str, code: str) -> None:
+    assert parse_state_code(raw) == code
+
+
+@pytest.mark.parametrize(
+    ("raw", "reason"),
+    [("tn", "must be upper-case"), ("Narnia", "unknown state"), ("ZZ", "unknown")],
+)
+def test_parse_state_code_rejects_wrong_case_and_unknown(raw: str, reason: str) -> None:
+    with pytest.raises(ValueError, match=reason):
+        parse_state_code(raw)
 
 
 @pytest.mark.parametrize(
@@ -75,10 +83,16 @@ def test_normalize_practice_area(raw: str, code: str | None) -> None:
 
 
 @pytest.mark.parametrize(
-    ("raw", "code"), [("ta", "ta"), ("TA", "ta"), ("Tamil", "ta"), ("Oriya", "or"), ("xx", None)]
+    ("raw", "code"), [("ta", "ta"), ("kok", "kok"), ("Tamil", "ta"), ("Oriya", "or")]
 )
-def test_normalize_language(raw: str, code: str | None) -> None:
-    assert normalize_language(raw) == code
+def test_parse_language_code_keeps_codes_exactly(raw: str, code: str) -> None:
+    assert parse_language_code(raw) == code
+
+
+@pytest.mark.parametrize(("raw", "reason"), [("TA", "must be lower-case"), ("xx", "unknown")])
+def test_parse_language_code_rejects_wrong_case_and_unknown(raw: str, reason: str) -> None:
+    with pytest.raises(ValueError, match=reason):
+        parse_language_code(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +114,7 @@ def test_parse_maps_the_supplied_file_format() -> None:
     assert first.practice_areas == ["DATA_PROTECTION"]
     assert (first.state_code, first.city, first.languages) == ("RJ", "Jaipur", ["ta"])
     assert second.practice_areas == ["TAX_LAW", "IP_LAW"]
-    assert second.state_code == "CT"
+    assert second.state_code == "CG"  # exactly as in the file
     assert second.languages == ["hi", "en"]
     assert second.phone is None
 
@@ -271,3 +285,97 @@ async def test_non_admins_cannot_upload(db_client: AsyncClient) -> None:
         files={"file": ("x.csv", _csv().encode(), "text/csv")},
     )
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Search API on imported data: exact codes, aliases, validation, facets
+# ---------------------------------------------------------------------------
+
+
+async def _seed(db: object, *rows: str, is_sample: bool = True) -> None:
+    report = await advocate_import.import_csv_text(db, _csv(*rows), is_sample=is_sample)  # type: ignore[arg-type]
+    assert report.failed == 0, report.errors
+
+
+async def test_search_api_matches_exact_codes_and_accepts_aliases(
+    db_client: AsyncClient, db_txn_session: object
+) -> None:
+    city = f"Zcity{uuid.uuid4().hex[:6]}"  # unique, so other tests' rows don't interfere
+    await _seed(
+        db_txn_session,
+        f"{_uid()},Cyber One,c1-{city}@example.com,9000000001,Cyber Law,TN,{city},ta",
+        f"{_uid()},Family Two,f2-{city}@example.com,9000000002,"
+        f"Family Law;Cyber Law,TS,{city},en;ta",
+        f"{_uid()},Tax Three,t3-{city}@example.com,9000000003,Tax Law,CG,{city},hi",
+    )
+
+    async def names(**params: str) -> list[str]:
+        resp = await db_client.get("/api/v1/advocates", params={"city": city, **params})
+        assert resp.status_code == 200, resp.text
+        return sorted(a["display_name"] for a in resp.json()["items"])
+
+    assert await names(practice_area="Cyber Law") == ["Cyber One", "Family Two"]
+    assert await names(practice_area="CYBER_LAW") == ["Cyber One", "Family Two"]
+    assert await names(state="TN") == ["Cyber One"]
+    assert await names(state_code="TS") == ["Family Two"]
+    assert await names(state="CG") == ["Tax Three"]  # stored exactly as written
+    assert await names(language_code="ta") == ["Cyber One", "Family Two"]
+    assert await names(practice_area="Cyber Law", state="TS", language_code="en") == ["Family Two"]
+    assert await names(state="KA") == []  # valid code, nobody there: empty page, not an error
+
+    resp = await db_client.get(
+        "/api/v1/advocates", params={"city": city.lower(), "page": "2", "page_size": "2"}
+    )
+    body = resp.json()
+    assert (body["total"], body["page"], body["page_size"], len(body["items"])) == (3, 2, 2, 1)
+    assert all(a["is_sample"] for a in body["items"])
+
+
+@pytest.mark.parametrize(
+    ("params", "field"),
+    [
+        ({"state": "tn"}, "state"),
+        ({"state": "Tamil Nadu"}, "state"),
+        ({"language_code": "TA"}, "language_code"),
+        ({"practice_area": "Astrology"}, "practice_area"),
+    ],
+)
+async def test_search_api_rejects_invalid_filters(
+    db_client: AsyncClient, params: dict[str, str], field: str
+) -> None:
+    resp = await db_client.get("/api/v1/advocates", params=params)
+    assert resp.status_code == 422
+    body = resp.json()["error"]
+    assert body["code"] == "validation_error"
+    assert body["details"][0]["field"] == field
+
+
+async def test_city_filter_treats_wildcards_literally(
+    db_client: AsyncClient, db_txn_session: object
+) -> None:
+    await _seed(
+        db_txn_session, f"{_uid()},Some One,{_uid().lower()}@example.com,1,Tax Law,KA,Mysuru,kn"
+    )
+    resp = await db_client.get("/api/v1/advocates", params={"city": "%"})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+async def test_facets_list_codes_present_with_counts(
+    db_client: AsyncClient, db_txn_session: object
+) -> None:
+    await _seed(
+        db_txn_session,
+        f"{_uid()},Facet One,{_uid().lower()}@example.com,1,Cyber Law,OD,Cuttack,or",
+    )
+    resp = await db_client.get("/api/v1/advocates/facets")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["sample_count"] >= 1
+    states = {s["code"]: s for s in body["states"]}
+    assert states["OD"]["label"] == "Odisha" and states["OD"]["count"] >= 1
+    languages = {lang["code"]: lang["label"] for lang in body["languages"]}
+    assert languages["or"] == "Odia"
+    areas = {a["code"]: a["label"] for a in body["practice_areas"]}
+    assert areas["CYBER_LAW"] == "Cyber Law"
+    assert "Cuttack" in {c["code"] for c in body["cities"]}

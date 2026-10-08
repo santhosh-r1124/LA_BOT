@@ -35,6 +35,13 @@ _GROUNDED_ANSWER_SYSTEM_PROMPT = (
     "- Cite the source(s) backing every factual claim with its bracketed "
     "number, e.g. [1], right after the claim. Do not cite a source for a "
     "sentence it doesn't actually support.\n"
+    "- Sources may be statutes or court judgments. Name a case, court, date or "
+    "citation only exactly as it appears in SOURCES; never invent or complete "
+    "one. A judgment decides its own facts: say what the court held there "
+    "rather than presenting it as a universal rule.\n"
+    "- If none of the SOURCES is actually relevant to the question, say that "
+    "sufficient relevant source material was not retrieved, and don't answer "
+    "from memory.\n"
     "- If the sources don't fully answer the question, say plainly what they "
     "don't cover instead of guessing, and recommend consulting a qualified "
     "advocate for that part.\n"
@@ -60,6 +67,13 @@ def _format_context(context: list[RetrievedChunk]) -> str:
             label += f", Section {chunk.section}"
         if chunk.article:
             label += f", Article {chunk.article}"
+        details = [
+            f"{key}: {chunk.metadata[key]}"
+            for key in ("court", "date", "citation")
+            if chunk.metadata.get(key)
+        ]
+        if details:
+            label += f" ({'; '.join(details)})"
         parts.append(f"[{index}] {label}\n{chunk.content}")
     return "\n\n".join(parts)
 
@@ -69,11 +83,14 @@ _GENERAL_ANSWER_SYSTEM_PROMPT = (
     "helper for consumers, IT professionals, startups and organisations.\n\n"
     "No excerpt from the platform's verified source library matched this "
     "question, so answer from your general knowledge of Indian law. The "
-    "product labels this reply as general information.\n\n"
+    "product already tells the user that no relevant source was found and "
+    "labels this reply as general information; don't repeat that notice.\n\n"
     "Rules:\n"
     "- Be accurate and conservative. Explain the principles, the usual process "
     "and the practical next steps. Name a specific Act or section only when you "
     "are confident it is correct and current, and never invent one.\n"
+    "- Do not name or cite any court case, judgment or law-report citation: no "
+    "source document backs this reply.\n"
     "- Since 1 July 2024 the Bharatiya Nyaya Sanhita, 2023 (BNS), the Bharatiya "
     "Nagarik Suraksha Sanhita, 2023 (BNSS) and the Bharatiya Sakshya Adhiniyam, "
     "2023 (BSA) have replaced the Indian Penal Code, the Code of Criminal "

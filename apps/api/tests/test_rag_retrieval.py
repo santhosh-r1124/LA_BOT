@@ -118,3 +118,112 @@ async def test_hybrid_search_returns_empty_list_when_no_chunks_exist(
         settings=get_settings(),  # type: ignore[arg-type]
     )
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# Keyword-only retrieval (no embeddings / no GEMINI_API_KEY) + citation metadata
+# ---------------------------------------------------------------------------
+
+
+async def _keyword_fixture(db: object) -> tuple[LegalChunk, LegalChunk, LegalDocument]:
+    # Test fixture text, not a real judgment.
+    judgment = LegalDocument(
+        title="TEST FIXTURE v. EXAMPLE",
+        source_url="https://huggingface.co/datasets/example/cases/viewer/default/train?row=0",
+        document_type=DocumentType.JUDGMENT,
+        checksum="kw-1",
+        source_dataset="example/cases",
+        external_id="case-1",
+        doc_metadata={
+            "dataset": "example/cases",
+            "case_name": "TEST FIXTURE v. EXAMPLE",
+            "court": "Test Court",
+            "date": "2020-01-02",
+        },
+    )
+    db.add(judgment)  # type: ignore[attr-defined]
+    await db.flush()  # type: ignore[attr-defined]
+    relevant = LegalChunk(
+        document_id=judgment.id,
+        chunk_index=0,
+        content="The tenant withheld the security deposit refund; the landlord claimed damages.",
+        embedding=None,
+    )
+    # Shares only generic legal words with the query below.
+    generic = LegalChunk(
+        document_id=judgment.id,
+        chunk_index=1,
+        content="The High Court of the State held that the law applies to every person in India.",
+        embedding=None,
+    )
+    db.add_all([relevant, generic])  # type: ignore[attr-defined]
+    await db.flush()  # type: ignore[attr-defined]
+    return relevant, generic, judgment
+
+
+async def test_keyword_only_search_works_without_embeddings(
+    db_txn_session: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    relevant, generic, judgment = await _keyword_fixture(db_txn_session)
+
+    async def must_not_embed(query: str, *, settings: object) -> list[float]:
+        raise AssertionError("no chunk has an embedding: the query must not be embedded")
+
+    monkeypatch.setattr(retrieval_module, "embed_query", must_not_embed)
+
+    results = await retrieval_module.hybrid_search(
+        "Under Indian law, can a landlord keep my security deposit?",
+        db=db_txn_session,  # type: ignore[arg-type]
+        settings=get_settings(),
+    )
+
+    assert [r.chunk_id for r in results] == [relevant.id]
+    assert generic.id not in [r.chunk_id for r in results]
+    # Citation metadata comes from the dataset only.
+    assert results[0].metadata == {
+        "court": "Test Court",
+        "date": "2020-01-02",
+        "case_name": "TEST FIXTURE v. EXAMPLE",
+        "dataset": "example/cases",
+    }
+    assert results[0].document_title == judgment.title
+
+
+async def test_unrelated_question_retrieves_nothing(
+    db_txn_session: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _keyword_fixture(db_txn_session)
+    results = await retrieval_module.hybrid_search(
+        "What is the law on cryptocurrency taxation in India?",
+        db=db_txn_session,  # type: ignore[arg-type]
+        settings=get_settings(),
+    )
+    assert results == []
+
+
+async def test_embedding_outage_falls_back_to_keyword_search(
+    db_txn_session: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.errors import ServiceUnavailableError
+
+    relevant, _generic, _doc = await _keyword_fixture(db_txn_session)
+    relevant.embedding = [1.0] + [0.0] * 767  # some chunks embedded
+    await db_txn_session.flush()  # type: ignore[attr-defined]
+
+    async def quota_exhausted(query: str, *, settings: object) -> list[float]:
+        raise ServiceUnavailableError("quota", code="embeddings_rate_limited")
+
+    monkeypatch.setattr(retrieval_module, "embed_query", quota_exhausted)
+
+    results = await retrieval_module.hybrid_search(
+        "security deposit refund",
+        db=db_txn_session,  # type: ignore[arg-type]
+        settings=get_settings(),
+    )
+    assert [r.chunk_id for r in results] == [relevant.id]
+
+
+def test_required_term_matches() -> None:
+    assert retrieval_module.required_term_matches(1) == 1
+    assert retrieval_module.required_term_matches(2) == 1
+    assert retrieval_module.required_term_matches(5) == 2

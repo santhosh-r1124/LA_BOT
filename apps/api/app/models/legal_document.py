@@ -15,7 +15,7 @@ from datetime import date, datetime
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Computed, Date, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import TSVECTOR
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -74,6 +74,14 @@ class LegalDocument(TimestampMixin, Base):
     ingestion_error: Mapped[str | None] = mapped_column(Text)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Set for rows ingested from a dataset (e.g. "dedol-hf/india-case-legal-rag"):
+    # (source_dataset, external_id) is unique, so re-ingestion is idempotent.
+    source_dataset: Mapped[str | None] = mapped_column(String(200))
+    external_id: Mapped[str | None] = mapped_column(String(200))
+    # The dataset's own descriptive fields (case name, court, date, citation,
+    # ...) exactly as provided -- never inferred or filled in.
+    doc_metadata: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+
     chunks: Mapped[list[LegalChunk]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
@@ -83,6 +91,7 @@ class LegalDocument(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_legal_documents_document_type", "document_type"),
         Index("ix_legal_documents_jurisdiction", "jurisdiction"),
+        Index("ux_legal_documents_dataset_row", "source_dataset", "external_id", unique=True),
     )
 
     def __repr__(self) -> str:  # pragma: no cover
@@ -105,7 +114,9 @@ class LegalChunk(Base):
     article: Mapped[str | None] = mapped_column(String(50))
     page_number: Mapped[int | None] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    # Null until an embedding provider has processed the chunk; such chunks
+    # are still found by the keyword half of retrieval.
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIM), nullable=True)
     # DB-generated (Postgres `GENERATED ALWAYS AS ... STORED`) — never set from
     # Python, kept in sync with `content` automatically. Backs the keyword half
     # of hybrid search (app/services/rag/retrieval.py, Phase 4); see migration
