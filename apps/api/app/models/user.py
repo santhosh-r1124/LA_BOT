@@ -73,10 +73,11 @@ class AdvocateProfile(TimestampMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
+    # Unique via the uq_advocate_profiles_user_id index (see __table_args__),
+    # which is how migration 0002 created it.
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        unique=True,
         nullable=False,
     )
     practice_areas: Mapped[list[str]] = mapped_column(
@@ -107,6 +108,7 @@ class AdvocateProfile(TimestampMixin, Base):
     user: Mapped[User] = relationship(back_populates="advocate_profile")
 
     __table_args__ = (
+        Index("uq_advocate_profiles_user_id", "user_id", unique=True),
         Index("ix_advocate_profiles_state_code", "state_code"),
         Index("ix_advocate_profiles_practice_areas", "practice_areas", postgresql_using="gin"),
         Index("ix_advocate_profiles_languages", "languages", postgresql_using="gin"),
@@ -125,7 +127,7 @@ class EmailVerificationToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
@@ -142,7 +144,7 @@ class PasswordResetToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)
@@ -165,7 +167,7 @@ class RefreshToken(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    jti_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    jti_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), nullable=False)

@@ -53,7 +53,9 @@ class LegalDocument(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     law_name: Mapped[str | None] = mapped_column(String(300))
     # "IN" for central/national law; an ISO-3166-2:IN state code for state law.
-    jurisdiction: Mapped[str] = mapped_column(String(10), nullable=False, default="IN")
+    jurisdiction: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="IN", server_default="IN"
+    )
     state_code: Mapped[str | None] = mapped_column(String(2))
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     document_type: Mapped[DocumentType] = mapped_column(
@@ -63,7 +65,7 @@ class LegalDocument(TimestampMixin, Base):
     version: Mapped[str | None] = mapped_column(String(50))
     # sha256 of the raw fetched bytes — detects whether a source has changed
     # since it was last ingested, without storing the raw content itself.
-    checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, default="", server_default="")
 
     ingestion_status: Mapped[IngestionStatus] = mapped_column(
         SAEnum(IngestionStatus, name="ingestion_status", native_enum=True),
@@ -72,7 +74,7 @@ class LegalDocument(TimestampMixin, Base):
         server_default=IngestionStatus.PENDING.value,
     )
     ingestion_error: Mapped[str | None] = mapped_column(Text)
-    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     # Set for rows ingested from a dataset (e.g. "dedol-hf/india-case-legal-rag"):
     # (source_dataset, external_id) is unique, so re-ingestion is idempotent.
@@ -121,14 +123,25 @@ class LegalChunk(Base):
     # Python, kept in sync with `content` automatically. Backs the keyword half
     # of hybrid search (app/services/rag/retrieval.py, Phase 4); see migration
     # 0005_rag_grounding for the matching GIN index.
-    content_tsv: Mapped[str] = mapped_column(
-        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), nullable=False
+    # Generated column (migration 0005); Postgres reports it as nullable.
+    content_tsv: Mapped[str | None] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('english', content)", persisted=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"), nullable=False)
 
     document: Mapped[LegalDocument] = relationship(back_populates="chunks")
 
-    __table_args__ = (Index("ix_legal_chunks_document_id", "document_id"),)
+    __table_args__ = (
+        Index("ix_legal_chunks_document_id", "document_id"),
+        # Created by migrations 0004/0005; declared so `alembic check` sees them.
+        Index("ix_legal_chunks_content_tsv", "content_tsv", postgresql_using="gin"),
+        Index(
+            "ix_legal_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     def __repr__(self) -> str:  # pragma: no cover
         return (
