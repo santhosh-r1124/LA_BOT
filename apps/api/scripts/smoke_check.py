@@ -5,7 +5,8 @@
 BASE_URL defaults to http://localhost:3000. Every advocate count is compared
 with a count computed independently from apps/api/data/advocates.csv, so the
 directory must hold only that file's rows (other imported advocates change the
-totals). Chat checks need an AI provider configured. Each call is recorded as
+totals). Chat checks work with an AI provider and without one (offline mode,
+answers built from the retrieved passages). Each call is recorded as
 METHOD / URL / REQUEST / STATUS / RESPONSE in RESULTS_JSON
 (default e2e-results.json). Exit code 1 if any check fails.
 """
@@ -208,11 +209,13 @@ record(
     {
         "knowledge_base": kb,
         "advocate_directory": st["advocate_directory"],
-        "llm": {k: st["llm"][k] for k in ("configured", "provider", "model")},
+        "llm": {k: st["llm"][k] for k in ("configured", "mode", "provider", "model")},
     },
     status == 200,
 )
 NOTICE = "I couldn't find sufficiently relevant material in the legal library"
+# Offline mode (no AI provider configured) replies from the passages alone.
+OFFLINE_NOTICE = "Nothing in the legal library matched your question"
 for q in (
     "What are the essential elements of a valid contract in India?",
     "What remedies are available for breach of contract?",
@@ -225,9 +228,13 @@ for q in (
     msg = payload.get("assistant_message", {}) if isinstance(payload, dict) else {}
     sources = msg.get("sources") or []
     content = msg.get("content", "")
+    offline = isinstance(payload, dict) and payload.get("answer_mode") == "sources_only"
     if sources:
-        passed = status == 200 and not content.startswith(NOTICE)
+        passed = status == 200 and not content.startswith((NOTICE, OFFLINE_NOTICE))
         note = "grounded: sources returned"
+    elif offline:
+        passed = status == 200 and content.startswith(OFFLINE_NOTICE)
+        note = "offline, no passage matched: the reply must say so"
     else:
         passed = status == 200 and content.startswith(NOTICE)
         note = "no relevant source retrieved: reply must start with the notice"

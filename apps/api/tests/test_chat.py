@@ -4,9 +4,11 @@ The classifier, LLM and retrieval calls are monkeypatched
 (app.services.legal_classifier.classify_query, app.services.llm.generate_grounded_answer,
 app.services.rag.retrieval.hybrid_search) so these test persistence,
 RBAC/ownership and routing logic without needing a real ANTHROPIC_API_KEY,
-GEMINI_API_KEY, or network access. One test
-(`test_send_message_without_api_key_returns_503`) deliberately does NOT patch
-anything, to prove the real "not configured" path works end-to-end.
+GEMINI_API_KEY, or network access. `_patch_llm` also marks a provider as
+configured (the suite has none), because with no provider the chat runs in
+offline mode. The two `*_without_*` tests deliberately do NOT patch anything,
+to prove the real offline path works end-to-end; tests/test_offline_chat.py
+covers that mode in depth.
 """
 
 from __future__ import annotations
@@ -51,6 +53,12 @@ FAKE_CHUNK = RetrievedChunk(
 )
 
 
+def _configure_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend an AI provider is configured, so chat takes the AI path (the
+    suite itself has no keys, which would otherwise mean offline mode)."""
+    monkeypatch.setattr(llm_module, "get_provider", lambda settings: object())
+
+
 def _patch_llm(
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -78,6 +86,7 @@ def _patch_llm(
             record_history.append(history)
         return answer
 
+    _configure_provider(monkeypatch)
     monkeypatch.setattr(legal_classifier, "classify_query", fake_classify)
     monkeypatch.setattr(retrieval_module, "hybrid_search", fake_search)
     monkeypatch.setattr(llm_module, "generate_grounded_answer", fake_generate)
@@ -114,11 +123,18 @@ async def _register(db_client: AsyncClient) -> dict[str, object]:
     return resp.json()
 
 
-async def test_send_message_without_api_key_returns_503(db_client: AsyncClient) -> None:
-    # Deliberately unpatched — conftest never sets ANTHROPIC_API_KEY.
+async def test_send_message_without_api_key_answers_from_sources_only(
+    db_client: AsyncClient,
+) -> None:
+    # Deliberately unpatched — conftest never configures a provider, so this is
+    # offline mode end to end: rules classifier, real retrieval, no model.
     resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
-    assert resp.status_code == 503
-    assert resp.json()["error"]["code"] == "llm_not_configured"
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer_mode"] == "sources_only"
+    assert body["user_message"]["legal_category"] == "DOCUMENT_GUIDANCE"
+    assert body["user_message"]["risk_level"] == "LOW"
+    assert "AI answers are switched off" in body["assistant_message"]["content"]
 
 
 async def test_anonymous_user_can_chat(
@@ -128,6 +144,7 @@ async def test_anonymous_user_can_chat(
     resp = await db_client.post("/api/v1/chat/messages", json={"message": "What is an affidavit?"})
     assert resp.status_code == 200
     body = resp.json()
+    assert body["answer_mode"] == "ai"
     assert body["conversation_id"]
     assert body["user_message"]["role"] == "user"
     assert body["user_message"]["legal_category"] == "IT_LAW"
@@ -226,6 +243,7 @@ async def test_retrieval_unavailable_falls_back_to_insufficient_evidence(
     async def fake_classify(message: str, *, settings: object) -> legal_classifier.Classification:
         return IT_LAW_CLASSIFICATION
 
+    _configure_provider(monkeypatch)
     monkeypatch.setattr(legal_classifier, "classify_query", fake_classify)
     monkeypatch.setattr(retrieval_module, "hybrid_search", raising_search)
 
@@ -293,6 +311,7 @@ async def test_out_of_scope_short_circuits_generation(
     async def fake_classify(*_args: object, **_kwargs: object) -> legal_classifier.Classification:
         return OUT_OF_SCOPE_CLASSIFICATION
 
+    _configure_provider(monkeypatch)
     monkeypatch.setattr(legal_classifier, "classify_query", fake_classify)
     monkeypatch.setattr(llm_module, "generate_grounded_answer", fake_generate)
 
@@ -437,9 +456,11 @@ async def test_stream_emits_start_deltas_and_done_then_persists(
 
     assert [name for name, _ in events] == ["start", "delta", "delta", "done"]
     start = events[0][1]
+    assert start["answer_mode"] == "ai"
     assert start["legal_category"] == "IT_LAW"
     assert start["sources"][0]["document_title"] == FAKE_CHUNK.document_title  # type: ignore[index]
     done = events[-1][1]
+    assert done["answer_mode"] == "ai"
     assert done["assistant_message"]["content"] == "Section 1 says X [1]."  # type: ignore[index]
 
     # Persisted exactly like the non-streaming endpoint.
@@ -511,10 +532,17 @@ async def test_stream_generation_failure_emits_error_and_persists_nothing(
     assert detail.status_code == 404
 
 
-async def test_stream_without_provider_returns_json_503(db_client: AsyncClient) -> None:
-    resp = await db_client.post("/api/v1/chat/messages/stream", json={"message": "q"})
-    assert resp.status_code == 503
-    assert resp.json()["error"]["code"] == "llm_not_configured"
+async def test_stream_without_provider_answers_from_sources_only(db_client: AsyncClient) -> None:
+    # Unpatched: no provider is configured, so the stream is offline mode.
+    resp = await db_client.post(
+        "/api/v1/chat/messages/stream", json={"message": "What is an affidavit?"}
+    )
+    assert resp.status_code == 200
+    events = _parse_sse(resp.text)
+    assert events[0][0] == "start" and events[-1][0] == "done"
+    assert events[0][1]["answer_mode"] == "sources_only"
+    assert events[-1][1]["answer_mode"] == "sources_only"
+    assert "error" not in [name for name, _ in events]
 
 
 # ---------------------------------------------------------------------------
@@ -528,6 +556,7 @@ async def test_status_reports_real_counts_and_no_secrets(db_client: AsyncClient)
     body = resp.json()
     assert body["llm"] == {
         "configured": False,
+        "mode": "offline",
         "provider": None,
         "model": None,
         "is_free_tier": None,
@@ -544,6 +573,28 @@ async def test_status_reports_real_counts_and_no_secrets(db_client: AsyncClient)
     assert body["advocate_directory"]["available"] is True
     assert body["features"] == {"open_login": False, "general_answers": True}
     assert "generated_at" in body
+
+
+async def test_status_mode_is_offline_without_a_provider(db_client: AsyncClient) -> None:
+    llm = (await db_client.get("/api/v1/status")).json()["llm"]
+    assert llm["mode"] == "offline"
+    assert llm["configured"] is False
+
+
+async def test_status_mode_is_ai_when_a_provider_is_configured(
+    db_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("GEMINI_API_KEY", "not-a-real-key-for-tests")
+    get_settings.cache_clear()
+    try:
+        llm = (await db_client.get("/api/v1/status")).json()["llm"]
+    finally:
+        get_settings.cache_clear()
+    assert llm["mode"] == "ai"
+    assert llm["configured"] is True
+    assert llm["provider"] == "gemini"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,157 @@
+/*
+ * typography.css — text classes.
+ *
+ * Pairing (all self-hosted):
+ *   Display  Newsreader (variable: optical size + weight, with italics)
+ *            Used with restraint: page titles, section titles, statistics,
+ *            statute quotes, the wordmark. Never for UI chrome or body copy.
+ *   Text/UI  Instrument Sans (variable weight, with italics)
+ *   Mono     IBM Plex Mono: citations, ids, section numbers, template blanks
+ */
+
+@layer components {
+  /* Display serif. Size comes from a text-* utility or a .display-* step. */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-optical-sizing: auto;
+    letter-spacing: -0.014em;
+    line-height: 1.15;
+    color: var(--color-fg-strong);
+    text-wrap: balance;
+  }
+  .display em {
+    font-style: italic;
+    font-weight: 450;
+  }
+  .display-sm {
+    font-size: var(--text-display-sm);
+    line-height: 1.15;
+  }
+  .display-md {
+    font-size: var(--text-display-md);
+    line-height: 1.1;
+    letter-spacing: -0.018em;
+  }
+  .display-lg {
+    font-size: var(--text-display-lg);
+    line-height: 1.04;
+    letter-spacing: -0.024em;
+  }
+
+  /* Small sans heading for cards, list rows and panel titles. */
+  .title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+    color: var(--color-fg-strong);
+    text-wrap: balance;
+  }
+  .title-lg {
+    font-size: 1.25rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* Intro paragraph under a page title. */
+  .lede {
+    max-width: 58ch;
+    font-size: var(--text-lg);
+    line-height: 1.6;
+    color: var(--color-fg-muted);
+    text-wrap: pretty;
+  }
+
+  .eyebrow {
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+  /* Optional leading brass dash for editorial feel. */
+  .eyebrow-rule {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+  }
+  .eyebrow-rule::before {
+    content: '';
+    width: 1.5rem;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.7;
+  }
+
+  .muted {
+    color: var(--color-fg-muted);
+  }
+  .subtle {
+    color: var(--color-fg-subtle);
+  }
+  .strong {
+    color: var(--color-fg-strong);
+  }
+
+  .link {
+    color: var(--color-link);
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent-line);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition:
+      color var(--dur-fast) ease,
+      text-decoration-color var(--dur-fast) ease;
+  }
+  .link:hover {
+    color: var(--color-link-hover);
+    text-decoration-color: currentColor;
+  }
+
+  /* Measure helpers: comfortable line lengths. */
+  .measure {
+    max-width: var(--measure);
+  }
+  .measure-sm {
+    max-width: 52ch;
+  }
+  .measure-lg {
+    max-width: 76ch;
+  }
+  .balance {
+    text-wrap: balance;
+  }
+  .pretty {
+    text-wrap: pretty;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .mono {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    letter-spacing: 0;
+  }
+  .caps {
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* Keyboard key. */
+  .kbd {
+    display: inline-block;
+    min-width: 1.4rem;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid var(--color-line-strong);
+    border-bottom-width: 2px;
+    border-radius: var(--radius-xs);
+    background: var(--color-field);
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    text-align: center;
+  }
+}

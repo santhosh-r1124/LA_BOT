@@ -8,6 +8,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# "ai": a model wrote the reply. "sources_only": no AI provider is configured,
+# so the reply is the retrieved passages laid out as text (offline mode).
+AnswerMode = Literal["ai", "sources_only"]
+
 
 class SendMessageRequest(BaseModel):
     conversation_id: uuid.UUID | None = None
@@ -71,6 +75,7 @@ class SendMessageResponse(BaseModel):
     disclaimer: str
     # Filled for HIGH/CRITICAL risk questions; empty otherwise.
     recommended_advocates: list[RecommendedAdvocate] = Field(default_factory=list)
+    answer_mode: AnswerMode = "ai"
 
 
 class ConversationSummary(BaseModel):

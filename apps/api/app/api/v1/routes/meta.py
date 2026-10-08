@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import time
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -45,6 +46,9 @@ async def read_meta(settings: SettingsDep) -> MetaResponse:
 
 class LLMStatus(BaseModel):
     configured: bool
+    # "ai" when a provider is configured. "offline" when none is: chat then
+    # answers from the retrieved sources alone and documents are template drafts.
+    mode: Literal["ai", "offline"]
     provider: str | None
     model: str | None
     is_free_tier: bool | None
@@ -209,6 +213,7 @@ async def read_status(settings: SettingsDep, db: DbSession, redis: RedisDep) -> 
         generated_at=datetime.now(UTC),
         llm=LLMStatus(
             configured=info.configured,
+            mode="ai" if info.configured else "offline",
             provider=info.provider,
             # The model that actually answered last (a fallback, if one was needed).
             model=health.model if health and health.ok and health.model else info.model,
