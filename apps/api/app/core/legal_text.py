@@ -32,3 +32,31 @@ OUT_OF_SCOPE_MESSAGE = (
     "and connecting you with an advocate. Could you rephrase your question as a "
     "legal question, or tell me what legal topic you need help with?"
 )
+
+# Offline mode (no AI provider configured): replies are built from the
+# retrieved passages alone. See app.services.llm.build_sources_only_answer.
+SOURCES_ONLY_INTRO = (
+    "AI answers are switched off on this server, so no explanation has been written "
+    "for your question. These are the passages in the legal library that match it "
+    "best. The numbers match the sources listed with this reply."
+)
+SOURCES_ONLY_OUTRO = (
+    "These passages are source text, not advice on your situation. Check the "
+    "official text before relying on them."
+)
+SOURCES_ONLY_NO_MATCH = (
+    "Nothing in the legal library matched your question, and AI answers are switched "
+    "off on this server, so there is no answer to give. Try rewording it around the "
+    "specific topic, law or document involved, for example a security deposit, unpaid "
+    "salary or a trademark registration."
+)
+
+# First reply to a greeting or "what can you do" in offline mode.
+OFFLINE_WELCOME_MESSAGE = (
+    "Hello. I'm the Legal Advisor for Indian law. AI answers are switched off on this "
+    "server, so I reply by finding the passages in the legal library that match your "
+    "question and showing them with their sources. Ask about a specific situation, for "
+    "example unpaid salary, a security deposit, a bounced cheque or a defective "
+    "product. The advocate directory is open, and the document assistant prepares "
+    "template drafts you can edit."
+)

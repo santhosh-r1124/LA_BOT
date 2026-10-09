@@ -159,6 +159,7 @@ class IngestReport:
     skipped: int = 0
     chunks: int = 0
     already_indexed: int = 0
+    duplicates: int = 0
     notes: list[str] = field(default_factory=list)
 
 
@@ -1145,12 +1146,32 @@ async def ingest_dataset(
                 )
             )
             existing = {d.external_id: d for d in existing_rows}
+            # Same judgment text under a different row id (datasets repeat
+            # records): keep the first copy, skip the rest.
+            known_text = set(
+                await db.scalars(
+                    select(LegalDocument.checksum).where(
+                        LegalDocument.source_dataset == info.name,
+                        LegalDocument.checksum.in_(
+                            [d.checksum for d in docs if d.external_id not in existing]
+                        ),
+                    )
+                )
+            )
             seen: set[str] = set()
+            seen_text: set[str] = set()
             for doc in docs:
                 if doc.external_id in seen:  # duplicate id inside the dataset
                     report.skipped += 1
                     continue
+                if doc.external_id not in existing and (
+                    doc.checksum in known_text or doc.checksum in seen_text
+                ):
+                    report.skipped += 1
+                    report.duplicates += 1
+                    continue
                 seen.add(doc.external_id)
+                seen_text.add(doc.checksum)
                 outcome = await _save(db, doc, existing.get(doc.external_id), settings)
                 setattr(report, outcome, getattr(report, outcome) + 1)
             try:

@@ -1,0 +1,271 @@
+/*
+ * Verification status panel and timeline.
+ * Tokens only, so it follows the theme. Each tone sets three custom properties
+ * that the medallion, the step markers and the note rule all read.
+ */
+
+.toneOk {
+  --tone: var(--color-ok);
+  --tone-bg: var(--color-ok-bg);
+  --tone-line: var(--color-ok-line);
+}
+.toneWarn {
+  --tone: var(--color-warn);
+  --tone-bg: var(--color-warn-bg);
+  --tone-line: var(--color-warn-line);
+}
+.toneAccent {
+  --tone: var(--color-accent-strong);
+  --tone-bg: var(--color-accent-soft);
+  --tone-line: var(--color-accent-line);
+}
+.toneDanger {
+  --tone: var(--color-danger);
+  --tone-bg: var(--color-danger-bg);
+  --tone-line: var(--color-danger-line);
+}
+.toneNeutral {
+  --tone: var(--color-fg-muted);
+  --tone-bg: var(--color-hover);
+  --tone-line: var(--color-line-strong);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .panel {
+    padding: 1.75rem;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.medallion {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 50%;
+  background: var(--tone-bg);
+  color: var(--tone);
+  font-size: 1.4rem;
+}
+
+.headText {
+  flex: 1;
+  min-width: 0;
+}
+
+.kicker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 1.15rem + 0.7vw, 1.65rem);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--color-fg-strong);
+  text-wrap: balance;
+}
+
+.explain {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--color-fg-muted);
+}
+
+/* The reviewer's note on a rejected profile. */
+.note {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-danger-line);
+  border-left-width: 3px;
+  border-radius: var(--radius-item);
+  background: var(--color-danger-bg);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}
+
+.noteLabel {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--color-danger);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.noteBody {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Three steps: stacked on phones, side by side from 560px. */
+.steps {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  column-gap: 0.85rem;
+  padding-bottom: 1.1rem;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+/* Vertical connector on phones. */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 2rem;
+  bottom: 0.1rem;
+  left: calc(1rem - 1px);
+  width: 2px;
+  background: var(--color-line-strong);
+}
+
+.step[data-state='done']:not(:last-child)::before {
+  background: var(--color-ok);
+}
+
+.marker {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1.5px solid var(--color-line-strong);
+  border-radius: 50%;
+  background: var(--color-canvas);
+  color: var(--color-fg-subtle);
+  font-size: 1rem;
+}
+
+.step[data-state='done'] .marker {
+  border-color: var(--color-ok-line);
+  background: var(--color-ok-bg);
+  color: var(--color-ok);
+}
+
+.step[data-state='current'] .marker {
+  border-color: var(--tone-line);
+  background: var(--tone-bg);
+  color: var(--tone);
+}
+
+.step[data-state='failed'] .marker {
+  border-color: var(--color-danger-line);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
+.stepText {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 0;
+}
+
+.stepLabel {
+  color: var(--color-fg-strong);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.step[data-state='todo'] .stepLabel {
+  color: var(--color-fg-muted);
+  font-weight: 500;
+}
+
+.stepCaption {
+  color: var(--color-fg-subtle);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+@media (min-width: 560px) {
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .step {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.6rem;
+    padding-bottom: 0;
+  }
+
+  /* Horizontal connector to the next step. */
+  .step:not(:last-child)::before {
+    top: calc(1rem - 1px);
+    right: -0.5rem;
+    bottom: auto;
+    left: 2.5rem;
+    width: auto;
+    height: 2px;
+  }
+
+  .stepText {
+    justify-content: flex-start;
+    min-height: 0;
+  }
+}
+
+.next {
+  display: flex;
+  gap: 0.7rem;
+  margin: 0;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}
+
+.next > svg {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.15rem;
+  color: var(--color-fg-subtle);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.checked {
+  color: var(--color-fg-subtle);
+  font-size: 0.8125rem;
+}

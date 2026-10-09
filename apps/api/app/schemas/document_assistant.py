@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,3 +46,7 @@ class DocumentRequestOut(BaseModel):
 class CreateDocumentResponse(BaseModel):
     document: DocumentRequestOut
     disclaimer: str
+    # "ai": drafted by the configured model. "template": no AI provider is
+    # configured, so the draft was assembled from the answers and standard
+    # clauses (its first line says so).
+    generation_mode: Literal["ai", "template"] = "ai"

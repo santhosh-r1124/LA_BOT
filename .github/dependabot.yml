@@ -12,11 +12,6 @@ updates:
   - package-ecosystem: pip
     directories:
       - "/apps/api"
-      - "/services/rag"
-      - "/services/document-processing"
-      - "/services/legal-classifier"
-      - "/services/risk-engine"
-      - "/services/notifications"
     schedule: { interval: weekly }
 
   - package-ecosystem: github-actions

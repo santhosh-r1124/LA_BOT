@@ -25,20 +25,24 @@ from app.core.legal_text import (
     INSUFFICIENT_EVIDENCE_MESSAGE,
     MANDATORY_DISCLAIMER,
     NO_RELEVANT_SOURCES_NOTICE,
+    OFFLINE_WELCOME_MESSAGE,
     OUT_OF_SCOPE_MESSAGE,
 )
 from app.core.logging import get_logger
 from app.models.chat import ChatMessage, Conversation, MessageRole
 from app.models.user import User
 from app.schemas.chat import (
+    AnswerMode,
     ChatMessageOut,
     ConversationDetail,
     ConversationSummary,
+    RecommendedAdvocate,
     SendMessageRequest,
     SendMessageResponse,
 )
-from app.services import legal_classifier, risk_engine
+from app.services import legal_classifier, risk_engine, rules_classifier
 from app.services import llm as llm_service
+from app.services.advocate_recommendation import recommend_advocates
 from app.services.rag import retrieval as retrieval_service
 from app.services.rag.retrieval import RetrievedChunk
 from app.services.rate_limit import AIRateLimit
@@ -91,10 +95,55 @@ def _source_dict(chunk: RetrievedChunk) -> dict[str, object]:
         "article": chunk.article,
         "source_url": chunk.source_url,
     }
-    for key in ("court", "date", "citation", "dataset"):
+    for key in ("court", "date", "citation", "case_name", "dataset"):
         if chunk.metadata.get(key):
             source[key] = str(chunk.metadata[key])
+    source["excerpt"] = _excerpt(chunk.content)
     return source
+
+
+def _excerpt(content: str) -> str:
+    return llm_service.excerpt(content)
+
+
+async def _recommend(
+    classification: legal_classifier.Classification,
+    *,
+    user: User | None,
+    db: DbSession,
+) -> list[RecommendedAdvocate]:
+    """HIGH/CRITICAL in-scope questions -> matching verified advocates. A
+    directory problem must never break the chat answer itself."""
+    if classification.is_out_of_scope or not risk_engine.requires_advocate_recommendation(
+        classification.risk_level
+    ):
+        return []
+    try:
+        # A savepoint keeps a failed query from poisoning the chat transaction.
+        async with db.begin_nested():
+            found = await recommend_advocates(
+                db,
+                category=classification.category,
+                state_code=user.state_code if user else None,
+            )
+    except Exception as exc:
+        logger.warning("advocate_recommendation_failed", error_type=type(exc).__name__)
+        return []
+    return [
+        RecommendedAdvocate(
+            id=r.profile.id,
+            display_name=r.display_name,
+            practice_areas=r.profile.practice_areas,
+            state_code=r.profile.state_code,
+            city=r.profile.city,
+            experience_years=r.profile.experience_years,
+            matched_area=r.matched_area,
+            exact_match=r.exact_match,
+            same_state=r.same_state,
+            is_sample=r.profile.is_sample,
+        )
+        for r in found
+    ]
 
 
 @dataclass(slots=True)
@@ -106,10 +155,13 @@ class _PreparedTurn:
     history: list[tuple[str, str]]
     classification: legal_classifier.Classification
     retrieved: list[RetrievedChunk]
-    # Set when the reply is fixed text (out of scope / no evidence) and no
-    # model generation is needed.
+    # Set when the reply is fixed text (out of scope / no evidence / offline
+    # mode) and no model generation is needed.
     fixed_answer: str | None
     sources: list[dict[str, object]] | None
+    recommended_advocates: list[RecommendedAdvocate]
+    # "sources_only" when no AI provider is configured (offline mode).
+    answer_mode: AnswerMode = "ai"
 
     @property
     def advocate_suffix(self) -> str:
@@ -136,6 +188,7 @@ async def _prepare_turn(
         history_source = []
 
     history = [(m.role.value, m.content) for m in history_source[-settings.chat_history_length :]]
+    offline = llm_service.is_offline(settings)
 
     user_message = ChatMessage(
         conversation_id=conversation.id, role=MessageRole.USER, content=payload.message
@@ -153,13 +206,28 @@ async def _prepare_turn(
     sources: list[dict[str, object]] | None = None
     if classification.is_out_of_scope:
         fixed_answer = OUT_OF_SCOPE_MESSAGE
+    elif offline and rules_classifier.is_smalltalk(payload.message):
+        # "hi" / "what can you do": nothing to search the library for.
+        fixed_answer = OFFLINE_WELCOME_MESSAGE
     else:
         retrieved = await _retrieve(payload.message, db=db, settings=settings)
         # [] marks "no indexed source backs this reply" (general answer or
         # insufficient evidence); the UI labels it accordingly.
         sources = [_source_dict(chunk) for chunk in retrieved]
-        if not retrieved and not settings.allow_general_answers:
+        if offline:
+            # No model: lay the passages out as text, numbered like `sources`.
+            fixed_answer = llm_service.build_sources_only_answer(
+                retrieved,
+                suggest_advocates=risk_engine.requires_advocate_recommendation(
+                    classification.risk_level
+                ),
+            )
+        elif not retrieved and not settings.allow_general_answers:
             fixed_answer = INSUFFICIENT_EVIDENCE_MESSAGE
+
+    # Chat history is rolled back on provider failure (see the stream route),
+    # but the directory read is side-effect free, so run it up front.
+    recommended = await _recommend(classification, user=user, db=db)
 
     return _PreparedTurn(
         conversation=conversation,
@@ -169,6 +237,8 @@ async def _prepare_turn(
         retrieved=retrieved,
         fixed_answer=fixed_answer,
         sources=sources,
+        recommended_advocates=recommended,
+        answer_mode="sources_only" if offline else "ai",
     )
 
 
@@ -192,6 +262,8 @@ async def _finalize_turn(
         user_message=ChatMessageOut.model_validate(turn.user_message),
         assistant_message=ChatMessageOut.model_validate(assistant_message),
         disclaimer=MANDATORY_DISCLAIMER,
+        recommended_advocates=turn.recommended_advocates,
+        answer_mode=turn.answer_mode,
     )
 
 
@@ -241,8 +313,8 @@ def _sse(event: str, data: object) -> str:
     responses={
         200: {
             "content": {"text/event-stream": {}},
-            "description": "Events: `start` (classification + sources), `delta` "
-            "(answer text), then `done` (the persisted SendMessageResponse) or "
+            "description": "Events: `start` (classification, `answer_mode`, sources), "
+            "`delta` (answer text), then `done` (the persisted SendMessageResponse) or "
             "`error` ({code, message}).",
         }
     },
@@ -268,7 +340,11 @@ async def send_message_stream(
                 "jurisdiction_scope": turn.classification.jurisdiction_scope,
                 "risk_level": turn.classification.risk_level,
                 "is_out_of_scope": turn.classification.is_out_of_scope,
+                "answer_mode": turn.answer_mode,
                 "sources": turn.sources,
+                "recommended_advocates": [
+                    a.model_dump(mode="json") for a in turn.recommended_advocates
+                ],
             },
         )
         if turn.fixed_answer is not None:

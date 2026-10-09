@@ -1,15 +1,27 @@
 import { isApiError } from '@legal-platform/shared';
 import { env } from './env';
 
+/** One field-level problem from a 422 response (`field` is like `body.email`). */
+export interface ApiFieldDetail {
+  field: string;
+  message: string;
+}
+
 export class ApiRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
     message: string,
     readonly requestId?: string,
+    readonly details?: ApiFieldDetail[],
   ) {
     super(message);
     this.name = 'ApiRequestError';
+  }
+
+  /** True when the request never got an answer (server down, offline, timeout). */
+  get isNetworkError(): boolean {
+    return this.status === 0;
   }
 }
 
@@ -58,9 +70,14 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
         payload.error.code,
         payload.error.message,
         payload.error.request_id,
+        payload.error.details,
       );
     }
-    throw new ApiRequestError(response.status, 'http_error', `Request failed (${response.status}).`);
+    throw new ApiRequestError(
+      response.status,
+      'http_error',
+      `Request failed (${response.status}).`,
+    );
   }
 
   return payload as T;

@@ -1,0 +1,26 @@
+/*
+ * legacy.css — shims for markup written before the theme contract existed.
+ * Delete a rule as soon as no page uses the class it targets.
+ *
+ * Pages used Tailwind's bg-white/[0.04..0.07] as a hover/active wash. White at
+ * 5% is invisible on light paper, so under the light theme the wash becomes an
+ * ink wash. New code must use bg-hover / .nav-link instead.
+ *
+ * These rules are deliberately UNLAYERED so they beat Tailwind's utilities
+ * layer.
+ */
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) .bg-white\/\[0\.04\],
+  :root:not([data-theme='dark']) .bg-white\/\[0\.06\],
+  :root:not([data-theme='dark']) .bg-white\/\[0\.07\],
+  :root:not([data-theme='dark']) .hover\:bg-white\/\[0\.04\]:hover {
+    background-color: var(--color-hover);
+  }
+}
+:root[data-theme='light'] .bg-white\/\[0\.04\],
+:root[data-theme='light'] .bg-white\/\[0\.06\],
+:root[data-theme='light'] .bg-white\/\[0\.07\],
+:root[data-theme='light'] .hover\:bg-white\/\[0\.04\]:hover {
+  background-color: var(--color-hover);
+}

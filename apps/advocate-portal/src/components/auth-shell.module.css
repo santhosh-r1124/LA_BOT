@@ -1,0 +1,170 @@
+/*
+ * Frame for the log in page: a centred card on phones; from 960px the card sits
+ * on the left and a short "what you can do after logging in" panel on the
+ * right. Tokens only; nothing is wider than its container.
+ */
+
+.shell {
+  display: grid;
+  gap: 2rem;
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding: clamp(1.5rem, 4vw, 3.5rem) var(--gutter) clamp(2.5rem, 6vw, 4.5rem);
+}
+
+@media (min-width: 640px) {
+  .shell {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .shell {
+    grid-template-columns: minmax(0, 29rem) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(3rem, 7vw, 6.5rem);
+    padding-block: 4.5rem 5.5rem;
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 30rem;
+  margin-inline: auto;
+  padding: 1.5rem 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .card {
+    padding: 2.25rem 2rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .card {
+    margin-inline: 0;
+  }
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.markLabel {
+  color: var(--color-fg-subtle);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.75rem, 1.5rem + 1.1vw, 2.1rem);
+  line-height: 1.12;
+  outline: none;
+}
+
+.lede {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  max-width: 44ch;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* ---- Aside ------------------------------------------------------------------ */
+
+.aside {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .aside {
+    position: sticky;
+    top: calc(var(--header-h) + 3rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    padding-top: 0.75rem;
+  }
+}
+
+.asideTitle {
+  max-width: 18ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1.4rem + 1.6vw, 2.75rem);
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--color-fg-strong);
+  text-wrap: balance;
+}
+
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.point {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 0 0.9rem;
+}
+
+.pointIcon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-size: 1.15rem;
+}
+
+.pointTitle {
+  display: block;
+  color: var(--color-fg-strong);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.pointText {
+  display: block;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}

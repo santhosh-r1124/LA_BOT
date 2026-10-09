@@ -1,0 +1,204 @@
+/*
+ * prose.css — long-form legal text, citations, statute quotes and the
+ * document "paper" used for generated drafts.
+ */
+
+@layer components {
+  /* ---- Legal prose (model output, passages) ------------------------------------ */
+  .prose-legal {
+    max-width: 72ch;
+    color: var(--color-fg);
+    font-size: 0.97rem;
+    line-height: 1.7;
+  }
+  .prose-legal > :first-child {
+    margin-top: 0;
+  }
+  .prose-legal p + p,
+  .prose-legal p + ul,
+  .prose-legal p + ol,
+  .prose-legal ul + p,
+  .prose-legal ol + p,
+  .prose-legal blockquote + p,
+  .prose-legal p + blockquote {
+    margin-top: 0.75rem;
+  }
+  .prose-legal ul,
+  .prose-legal ol {
+    padding-left: 1.3rem;
+  }
+  .prose-legal ul {
+    list-style: disc;
+  }
+  .prose-legal ol {
+    list-style: decimal;
+  }
+  .prose-legal li::marker {
+    color: var(--color-fg-subtle);
+  }
+  .prose-legal li + li {
+    margin-top: 0.3rem;
+  }
+  .prose-legal h3 {
+    margin-top: 1.1rem;
+    color: var(--color-fg-strong);
+    font-size: 1rem;
+    font-weight: 650;
+    letter-spacing: -0.005em;
+  }
+  .prose-legal strong {
+    color: var(--color-fg-strong);
+    font-weight: 650;
+  }
+  .prose-legal a {
+    color: var(--color-link);
+    text-decoration: underline;
+    text-decoration-color: var(--color-accent-line);
+    text-underline-offset: 3px;
+  }
+  .prose-legal code {
+    padding: 0.05rem 0.3rem;
+    border-radius: var(--radius-xs);
+    background: var(--color-hover);
+  }
+  .prose-legal blockquote {
+    margin-inline: 0;
+    padding-left: 1rem;
+    border-left: 2px solid var(--color-brass);
+    color: var(--color-fg-muted);
+  }
+
+  /* ---- Citations ----------------------------------------------------------------- */
+  /* Inline numbered marker: <a class="cite">1</a>, also used as the list bullet
+     in a sources list. */
+  .cite {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.3rem;
+    height: 1.15rem;
+    margin-inline: 0.12rem;
+    padding: 0 0.28rem;
+    border: 1px solid var(--color-accent-line);
+    border-radius: var(--radius-xs);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    vertical-align: 0.12em;
+    text-decoration: none;
+    transition:
+      background-color var(--dur-fast) ease,
+      color var(--dur-fast) ease;
+  }
+  a.cite:hover,
+  button.cite:hover,
+  .cite.is-active {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+  /* A full reference line: court, date, case name. */
+  .citation {
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    letter-spacing: 0;
+  }
+
+  /* Statute / judgment extract: serif, with a brass rule. */
+  .statute {
+    margin: 0;
+    padding: 0.2rem 0 0.2rem 1.1rem;
+    border-left: 2px solid var(--color-brass);
+    color: var(--color-fg);
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+  }
+  .statute-cite {
+    display: block;
+    margin-top: 0.5rem;
+    color: var(--color-fg-subtle);
+    font-family: var(--font-sans);
+    font-size: 0.78rem;
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  /* ---- Document paper (generated drafts) -------------------------------------------- */
+  .paper {
+    position: relative;
+    padding: clamp(1.25rem, 4vw, 2.5rem);
+    border: 1px solid var(--color-line-strong);
+    border-top: 3px solid var(--color-brass);
+    border-radius: var(--radius-item);
+    background: var(--color-elevated);
+    box-shadow: var(--shadow-raised);
+    color: var(--color-fg);
+    font-family: var(--font-display);
+    font-size: 1.0625rem;
+    line-height: 1.75;
+  }
+  .paper h1,
+  .paper h2,
+  .paper h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--color-fg-strong);
+  }
+  .paper p + p {
+    margin-top: 0.9rem;
+  }
+  .paper-pre {
+    margin: 0;
+    font: inherit;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  /* A blank the reader must fill in: [____] */
+  .blank {
+    padding: 0 0.3em;
+    border-bottom: 1px dashed var(--color-warn);
+    border-radius: 3px 3px 0 0;
+    background: var(--color-warn-bg);
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    color: var(--color-fg);
+  }
+  /* Rubber-stamp label: DRAFT, TEMPLATE, SAMPLE, FIXTURE. Colour via text-* . */
+  .stamp {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border: 1.5px solid currentColor;
+    border-radius: var(--radius-xs);
+    color: var(--color-warn);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    line-height: 1.5;
+    text-transform: uppercase;
+    transform: rotate(-1.5deg);
+  }
+
+  /* ---- Chat bubbles ------------------------------------------------------------------------ */
+  .bubble-user {
+    max-width: 85%;
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--color-accent-line);
+    border-radius: 1.1rem 1.1rem 0.3rem 1.1rem;
+    background: var(--color-accent-soft);
+    color: var(--color-fg);
+    font-size: var(--text-sm);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}

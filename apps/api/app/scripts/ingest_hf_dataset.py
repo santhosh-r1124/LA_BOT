@@ -118,7 +118,8 @@ async def _ingest(settings: Settings, args: argparse.Namespace) -> int:
     _print_info(info) if args.verbose else print(f"Dataset: {info.name} ({info.source_key})")
     print(
         f"Done. {report.added} added, {report.updated} updated, {report.unchanged} unchanged, "
-        f"{report.skipped} rows skipped. {report.already_indexed + report.added} documents and "
+        f"{report.skipped} rows skipped ({report.duplicates} duplicate texts). "
+        f"{report.already_indexed + report.added} documents and "
         f"{report.chunks} chunks from {info.name} are now indexed."
     )
     for note in report.notes:

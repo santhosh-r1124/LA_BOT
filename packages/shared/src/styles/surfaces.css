@@ -1,0 +1,402 @@
+/*
+ * surfaces.css — panels, cards, lists, stats, definition lists, tables,
+ * avatars, disclosure and menus.
+ *
+ * Elevation scale (use these, nothing else):
+ *   0  flat          .surface-flat / .card-flat   fill only, hairline border
+ *   1  raised        .card / .card-raised         --shadow-raised
+ *   2  glass panel   .surface                     blur + --shadow-edge + raised
+ *   3  float         .menu, .composer             --shadow-float
+ *   4  overlay       reserved                     --shadow-overlay
+ * Glass (blur) is only for things that float over content: the header, primary
+ * panels and the chat composer. Nested items stay flat.
+ */
+
+@layer components {
+  /* ---- Panels ------------------------------------------------------------ */
+  .surface {
+    background: var(--color-glass);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+    backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: var(--shadow-edge), var(--shadow-raised);
+  }
+  .surface-flat {
+    background: var(--color-tint);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-item);
+  }
+  .surface-interactive {
+    transition:
+      border-color var(--dur) ease,
+      background-color var(--dur) ease,
+      box-shadow var(--dur) ease,
+      transform var(--dur) var(--ease-out-soft);
+  }
+  .surface-interactive:hover {
+    border-color: var(--color-line-strong);
+    background: var(--color-glass-hover);
+    box-shadow: var(--shadow-raised);
+  }
+
+  /* ---- Cards (preferred names for new work) -------------------------------- */
+  .card,
+  .card-flat,
+  .card-raised,
+  .card-interactive {
+    display: block;
+    padding: var(--card-pad, 1.25rem);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-item);
+    background: var(--color-tint);
+    color: inherit;
+    text-decoration: none;
+  }
+  .card-raised {
+    background: var(--color-elevated);
+    box-shadow: var(--shadow-raised);
+  }
+  .card-interactive {
+    background: var(--color-elevated);
+    box-shadow: var(--shadow-raised);
+    transition:
+      border-color var(--dur) ease,
+      box-shadow var(--dur) ease,
+      transform var(--dur) var(--ease-out-soft);
+  }
+  .card-interactive:hover {
+    border-color: var(--color-accent-line);
+    box-shadow: var(--shadow-float);
+    transform: translateY(-2px);
+  }
+  .card-interactive:active {
+    transform: translateY(0);
+  }
+  .card-compact {
+    --card-pad: 0.9rem 1rem;
+  }
+  .card-roomy {
+    --card-pad: 1.75rem;
+  }
+  /* Brass edge: marks the one card on a page that matters most. */
+  .card-accent {
+    border-color: var(--color-accent-line);
+    box-shadow: inset 3px 0 0 var(--color-brass);
+  }
+
+  /* ---- Lists ---------------------------------------------------------------- */
+  /* Divided list in a rounded container: <ul class="list"><li>…</li></ul> */
+  .list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-item);
+    background: var(--color-tint);
+    overflow: hidden;
+  }
+  .list > li,
+  .list-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.8rem 1rem;
+  }
+  .list > li + li,
+  .list-row + .list-row {
+    border-top: 1px solid var(--color-line);
+  }
+  /* Same rows without the container chrome. */
+  .list-flush {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .list-flush > li {
+    padding-block: 0.75rem;
+  }
+  .list-flush > li + li {
+    border-top: 1px solid var(--color-line);
+  }
+  .list-row-interactive {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--dur-fast) ease;
+  }
+  .list-row-interactive:hover {
+    background: var(--color-hover);
+  }
+  .list-row:target,
+  .list > li:target {
+    background: var(--color-accent-soft);
+  }
+  .list-row-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .list-row-title {
+    font-weight: 600;
+    color: var(--color-fg-strong);
+    line-height: 1.35;
+  }
+  .list-row-meta {
+    margin-top: 0.1rem;
+    color: var(--color-fg-subtle);
+    font-size: var(--text-sm);
+  }
+
+  /* ---- Stats / metrics --------------------------------------------------------- */
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+  }
+  .stat-value {
+    font-family: var(--font-display);
+    font-size: var(--text-3xl);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--color-fg-strong);
+  }
+  .stat-label {
+    color: var(--color-fg-subtle);
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .stat-note {
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
+  }
+  /* A row of stats separated by hairlines. */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-item);
+    background: var(--color-line);
+    overflow: hidden;
+  }
+  .stats > .stat {
+    padding: 1rem 1.25rem;
+    background: var(--color-elevated);
+  }
+
+  /* ---- Definition list --------------------------------------------------------- */
+  /* <dl class="dl"><dt>Fee</dt><dd>₹1,500</dd>…</dl> */
+  .dl {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 10.5rem) minmax(0, 1fr);
+    gap: 0.65rem 1.25rem;
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+  .dl dt {
+    color: var(--color-fg-subtle);
+    font-weight: 500;
+  }
+  .dl dd {
+    margin: 0;
+    color: var(--color-fg);
+    overflow-wrap: anywhere;
+  }
+  @media (max-width: 479px) {
+    .dl {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.1rem;
+    }
+    .dl dd {
+      margin-bottom: 0.6rem;
+    }
+  }
+  /* Always stacked (label above value). */
+  .dl-stack {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.15rem;
+  }
+  .dl-stack dd {
+    margin-bottom: 0.7rem;
+  }
+
+  /* ---- Tables --------------------------------------------------------------------- */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-item);
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .data-table th {
+    padding: 0.65rem 0.8rem;
+    border-bottom: 1px solid var(--color-line-strong);
+    color: var(--color-fg-subtle);
+    font-size: 0.72rem;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .data-table td {
+    padding: 0.7rem 0.8rem;
+    border-bottom: 1px solid var(--color-line);
+    vertical-align: top;
+  }
+  .data-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .data-table tbody tr:hover td {
+    background: var(--color-hover);
+  }
+
+  /* ---- Avatar (initials) ------------------------------------------------------------ */
+  .avatar {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 1px solid var(--color-accent-line);
+    border-radius: 50%;
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    text-transform: uppercase;
+    user-select: none;
+    overflow: hidden;
+  }
+  .avatar-sm {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.82rem;
+  }
+  .avatar-lg {
+    width: 3.5rem;
+    height: 3.5rem;
+    font-size: 1.35rem;
+  }
+  .avatar-xl {
+    width: 5rem;
+    height: 5rem;
+    font-size: 1.9rem;
+  }
+  .avatar-square {
+    border-radius: var(--radius-item);
+  }
+  .avatar-neutral {
+    border-color: var(--color-line-strong);
+    background: var(--color-hover);
+    color: var(--color-fg-muted);
+  }
+
+  /* ---- Disclosure (<details class="disclosure">) ---------------------------------------- */
+  .disclosure > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    list-style: none;
+    cursor: pointer;
+  }
+  .disclosure > summary::-webkit-details-marker {
+    display: none;
+  }
+  .disclosure > summary::after {
+    content: '';
+    flex: none;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-left: auto;
+    border-right: 1.75px solid currentColor;
+    border-bottom: 1.75px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform var(--dur) ease;
+    opacity: 0.7;
+  }
+  .disclosure[open] > summary::after {
+    transform: rotate(225deg) translateY(-2px);
+  }
+
+  /* ---- Menus (no modal; position them yourself) ----------------------------------------- */
+  /* <div class="menu-anchor"><button/><div class="menu menu-pop" role="menu">
+       <button class="menu-item" role="menuitem">…</button></div></div> */
+  .menu-anchor {
+    position: relative;
+    display: inline-block;
+  }
+  .menu {
+    min-width: 12rem;
+    margin: 0;
+    padding: 0.35rem;
+    list-style: none;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-item);
+    background: var(--color-elevated);
+    box-shadow: var(--shadow-float);
+  }
+  .menu-pop {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    z-index: var(--z-menu);
+  }
+  .menu-pop-left {
+    right: auto;
+    left: 0;
+  }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.5rem 0.65rem;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--color-fg);
+    font-size: var(--text-sm);
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .menu-item:hover,
+  .menu-item:focus-visible {
+    background: var(--color-hover);
+    outline-offset: -2px;
+  }
+  .menu-item[aria-current],
+  .menu-item[aria-checked='true'],
+  .menu-item.is-active {
+    color: var(--color-accent-strong);
+    font-weight: 600;
+  }
+  .menu-item-danger {
+    color: var(--color-danger);
+  }
+  .menu-label {
+    padding: 0.4rem 0.65rem 0.25rem;
+    color: var(--color-fg-subtle);
+    font-size: 0.68rem;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .menu-sep {
+    height: 1px;
+    margin: 0.3rem 0.2rem;
+    background: var(--color-line);
+  }
+}

@@ -3,21 +3,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch, ApiRequestError } from './api-client';
 
+export type LlmMode = 'ai' | 'offline';
+
 /** Mirrors `GET /api/v1/status` (apps/api/app/api/v1/routes/meta.py). */
 export interface PlatformStatus {
   generated_at: string;
   llm: {
     configured: boolean;
+    /**
+     * "ai" when a provider is configured, otherwise "offline": the product still
+     * answers with matching passages, rules-based risk levels and template
+     * drafts. Absent on older API versions (derive it from `configured`).
+     */
+    mode?: LlmMode;
     provider: string | null;
     model: string | null;
     is_free_tier: boolean | null;
+    /** Secondary provider used if the primary fails; null = none. */
+    fallback_provider?: string | null;
     /** Outcome of the most recent real model call; null until the first one. */
     last_call_ok: boolean | null;
     last_call_at: string | null;
     last_error_code: string | null;
     last_error_message: string | null;
   };
-  embeddings: { configured: boolean; model: string | null };
+  embeddings: { configured: boolean; model: string | null; provider?: string };
   knowledge_base: {
     available: boolean;
     documents_indexed: number | null;
@@ -44,6 +54,12 @@ export interface PlatformStatus {
   };
   /** Server feature switches (absent on older API versions). */
   features?: { open_login: boolean; general_answers: boolean };
+  /** Live dependency checks (absent on older API versions). */
+  dependencies?: {
+    database: { ok: boolean | null; detail: string | null };
+    redis: { ok: boolean | null; detail: string | null };
+    vector_search: { ok: boolean | null; detail: string | null };
+  };
 }
 
 /** Mirrors `POST /api/v1/status/check-llm`. */
@@ -56,8 +72,26 @@ export interface LlmCheck {
   error_message: string | null;
 }
 
+/**
+ * Components that mount together (the home hero and the status panel) share one
+ * in-flight request instead of each asking the API; a later call starts a new one.
+ */
+let statusInFlight: Promise<PlatformStatus> | null = null;
+
+function fetchStatusOnce(): Promise<PlatformStatus> {
+  if (!statusInFlight) {
+    const request = apiFetch<PlatformStatus>('/api/v1/status', { timeoutMs: 8_000 });
+    const clear = () => {
+      if (statusInFlight === request) statusInFlight = null;
+    };
+    request.then(clear, clear);
+    statusInFlight = request;
+  }
+  return statusInFlight;
+}
+
 export const statusClient = {
-  get: () => apiFetch<PlatformStatus>('/api/v1/status', { timeoutMs: 8_000 }),
+  get: fetchStatusOnce,
   checkLlm: () =>
     apiFetch<LlmCheck>('/api/v1/status/check-llm', { method: 'POST', timeoutMs: 90_000 }),
 };

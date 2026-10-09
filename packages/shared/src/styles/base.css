@@ -1,0 +1,192 @@
+/*
+ * base.css — element defaults: document, typography, focus, selection,
+ * scrollbars, motion, print and forced-colours handling.
+ */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Anchors land below the sticky header. */
+    scroll-padding-top: calc(var(--header-h) + 1rem);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  html,
+  body {
+    padding: 0;
+    margin: 0;
+  }
+
+  body {
+    min-height: 100dvh;
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    font-optical-sizing: auto;
+    font-kerning: normal;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* A single, static light source at the top. Theme-aware via --glow-*. */
+    background:
+      radial-gradient(1100px 520px at 12% -12%, var(--glow-a), transparent 62%),
+      radial-gradient(900px 480px at 100% -10%, var(--glow-b), transparent 60%), var(--color-canvas);
+    background-attachment: fixed;
+  }
+
+  /* ---- Typography defaults -------------------------------------------- */
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+  p,
+  li,
+  dd,
+  blockquote,
+  figcaption {
+    text-wrap: pretty;
+  }
+  strong,
+  b {
+    font-weight: 650;
+  }
+  small {
+    font-size: var(--text-sm);
+  }
+  em,
+  i {
+    font-synthesis: none;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+  hr {
+    border-color: var(--color-line);
+  }
+
+  a {
+    color: inherit;
+  }
+
+  ::placeholder {
+    color: var(--color-fg-subtle);
+    opacity: 1;
+  }
+
+  ::selection {
+    background: var(--color-selection);
+    color: inherit;
+  }
+
+  :target {
+    scroll-margin-top: calc(var(--header-h) + 1rem);
+  }
+
+  /* ---- Focus ----------------------------------------------------------- */
+  /* One ring everywhere. outline follows border-radius in modern browsers,
+     so no per-element radius is forced here. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  select option {
+    background: var(--color-elevated);
+    color: var(--color-fg);
+  }
+
+  /* ---- Scrollbars ------------------------------------------------------ */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scroll) transparent;
+  }
+  @supports not (scrollbar-width: thin) {
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--color-scroll);
+      background-clip: content-box;
+      border: 3px solid transparent;
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--color-scroll-hover);
+      background-clip: content-box;
+    }
+  }
+
+  /* ---- Motion ---------------------------------------------------------- */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* ---- Forced colours (Windows High Contrast) --------------------------- */
+  @media (forced-colors: active) {
+    .btn,
+    .input,
+    .chip,
+    .badge,
+    .alert,
+    .surface,
+    .surface-flat,
+    .card {
+      border: 1px solid CanvasText;
+    }
+    .btn-primary {
+      background: Highlight;
+      color: HighlightText;
+    }
+    .skeleton {
+      background: GrayText;
+      opacity: 0.3;
+    }
+  }
+
+  /* ---- Print ------------------------------------------------------------ */
+  @media print {
+    body {
+      background: #fff;
+      color: #000;
+    }
+    .site-header,
+    .site-footer,
+    .no-print {
+      display: none !important;
+    }
+    .surface,
+    .surface-flat,
+    .card,
+    .paper {
+      box-shadow: none;
+      background: #fff;
+      border-color: #999;
+      backdrop-filter: none;
+    }
+    a {
+      text-decoration: underline;
+    }
+  }
+}

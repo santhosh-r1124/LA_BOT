@@ -1,0 +1,199 @@
+/*
+ * feedback.css — badges, tags, alerts, banners, notes, skeletons.
+ *
+ * Status colours are always paired with a text label (and ideally an icon)
+ * so meaning never depends on colour alone (WCAG 1.4.1). Every tone has a
+ * readable foreground (--color-{tone}) on its tint (--color-{tone}-bg).
+ */
+
+@layer components {
+  /* ---- Badges -------------------------------------------------------------- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-fg-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .badge > svg {
+    width: 0.95em;
+    height: 0.95em;
+    flex: none;
+  }
+  .badge-sm {
+    padding: 0.05rem 0.45rem;
+    font-size: 0.6875rem;
+  }
+  .badge-ok {
+    color: var(--color-ok);
+    border-color: var(--color-ok-line);
+    background: var(--color-ok-bg);
+  }
+  .badge-warn {
+    color: var(--color-warn);
+    border-color: var(--color-warn-line);
+    background: var(--color-warn-bg);
+  }
+  .badge-danger {
+    color: var(--color-danger);
+    border-color: var(--color-danger-line);
+    background: var(--color-danger-bg);
+  }
+  .badge-info {
+    color: var(--color-info);
+    border-color: var(--color-info-line);
+    background: var(--color-info-bg);
+  }
+  .badge-accent {
+    color: var(--color-accent-strong);
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-soft);
+  }
+  .dot {
+    flex: none;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* Small rectangular label for ids, section numbers, dataset names. */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.05rem 0.45rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-xs);
+    background: var(--color-hover);
+    color: var(--color-fg-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  /* ---- Alerts ---------------------------------------------------------------- */
+  /* <div class="alert alert-warn" role="status"><svg/><div>
+       <p class="alert-title">…</p><p>…</p></div></div> */
+  .alert {
+    --alert-tone: var(--color-fg-muted);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-item);
+    background: var(--color-tint);
+    color: var(--color-fg);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+  .alert > svg:first-child {
+    flex: none;
+    width: 1.2rem;
+    height: 1.2rem;
+    margin-top: 0.05rem;
+    color: var(--alert-tone);
+  }
+  .alert-title {
+    color: var(--color-fg-strong);
+    font-weight: 650;
+  }
+  .alert-info {
+    --alert-tone: var(--color-info);
+    border-color: var(--color-info-line);
+    background: var(--color-info-bg);
+  }
+  .alert-ok {
+    --alert-tone: var(--color-ok);
+    border-color: var(--color-ok-line);
+    background: var(--color-ok-bg);
+  }
+  .alert-warn {
+    --alert-tone: var(--color-warn);
+    border-color: var(--color-warn-line);
+    background: var(--color-warn-bg);
+  }
+  .alert-danger {
+    --alert-tone: var(--color-danger);
+    border-color: var(--color-danger-line);
+    background: var(--color-danger-bg);
+  }
+
+  /* Slim full-width strip, e.g. "AI answers are off: sources only". */
+  .banner {
+    --banner-tone: var(--color-fg-muted);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem 0.75rem;
+    padding: 0.5rem var(--gutter);
+    border-bottom: 1px solid var(--color-line);
+    background: var(--color-tint);
+    color: var(--color-fg);
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    text-align: center;
+  }
+  .banner > svg {
+    flex: none;
+    width: 1.05rem;
+    height: 1.05rem;
+    color: var(--banner-tone);
+  }
+  .banner-info {
+    --banner-tone: var(--color-info);
+    border-color: var(--color-info-line);
+    background: var(--color-info-bg);
+  }
+  .banner-warn {
+    --banner-tone: var(--color-warn);
+    border-color: var(--color-warn-line);
+    background: var(--color-warn-bg);
+  }
+  .banner-ok {
+    --banner-tone: var(--color-ok);
+    border-color: var(--color-ok-line);
+    background: var(--color-ok-bg);
+  }
+
+  /* Inline aside with a brass rule: a quiet "good to know". */
+  .note {
+    padding: 0.15rem 0 0.15rem 0.9rem;
+    border-left: 2px solid var(--color-brass);
+    color: var(--color-fg-muted);
+    font-size: var(--text-sm);
+    line-height: 1.55;
+  }
+  .note-warn {
+    border-left-color: var(--color-warn);
+  }
+
+  /* ---- Skeleton -------------------------------------------------------------------- */
+  .skeleton {
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+      90deg,
+      var(--color-skeleton-a) 0%,
+      var(--color-skeleton-b) 50%,
+      var(--color-skeleton-a) 100%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+  }
+  .skeleton-circle {
+    border-radius: 50%;
+  }
+  .skeleton-block {
+    border-radius: var(--radius-item);
+  }
+}

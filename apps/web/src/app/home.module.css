@@ -1,0 +1,371 @@
+/*
+ * Home page styling that the shared design system has no class for. Tokens only
+ * (theme-aware); no raw colours. Everything here follows the light and dark
+ * themes and collapses to one column on phones.
+ */
+
+/* ---- Hero ---------------------------------------------------------------- */
+
+.proof {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.proof li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.proof svg {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-accent);
+}
+
+/* ---- Tool tiles ------------------------------------------------------------ */
+
+.bento {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .bento {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+  .tileChat {
+    grid-row: span 2;
+  }
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  height: 100%;
+  padding: 1.5rem;
+}
+
+.tileHead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.iconTile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius-item);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.iconTile svg {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.points {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.points svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-top: 0.2rem;
+  color: var(--color-ok);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  margin-top: auto;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.cta svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  transition: transform var(--dur) var(--ease-out-soft);
+}
+
+/* The link covers the whole card, so the card is one click target and the link
+   itself keeps a short name. */
+.cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* Show the keyboard focus ring around the whole card instead of the small label. */
+@supports selector(:has(*)) {
+  .cta:focus-visible {
+    outline-color: transparent;
+  }
+  .tile:has(.cta:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+.tile:hover .cta svg {
+  transform: translateX(3px);
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A sample reply in the offline format. Text, not placeholder bars, so it shows
+   what the product really returns. Everything in it is labelled as a sample. */
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin: auto 0 0;
+  padding: 1rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-sunken);
+}
+
+.replyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.replyLead {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.passage {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-brass);
+  border-radius: var(--radius-control);
+  background: var(--color-elevated);
+}
+
+.passage :global(.cite) {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.passageBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.passageBody p {
+  margin: 0;
+}
+
+.passageTitle {
+  color: var(--color-fg-strong);
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.passageText {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.passageMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.75rem;
+  color: var(--color-fg-subtle);
+  font-size: var(--text-xs);
+}
+
+.replyRule {
+  height: 1px;
+  background: var(--color-line);
+}
+
+.advocateRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.advocateRow p {
+  margin: 0;
+}
+
+.replyCaption {
+  margin: 0;
+  color: var(--color-fg-subtle);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* Overlapping people. Opaque (a tint over the card colour) with a ring in the
+   panel colour, so each one stacks cleanly on the next in both themes. */
+.people {
+  display: flex;
+  flex: none;
+}
+
+.person {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  margin-left: -0.55rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-elevated));
+  color: var(--color-accent-strong);
+  box-shadow: 0 0 0 2px var(--color-sunken);
+}
+
+.person svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.person:first-child {
+  margin-left: 0;
+}
+
+/* ---- How an answer is produced ---------------------------------------------- */
+
+.steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  padding: 0 0 2rem 3.5rem;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: 50%;
+  background: var(--color-elevated);
+  color: var(--color-accent-strong);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-raised);
+}
+
+/* The rail between two steps. */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 2.5rem;
+  bottom: 0;
+  left: 1.25rem;
+  width: 1px;
+  background: var(--color-line-strong);
+}
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mode {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.mode :global(.tag) {
+  flex: none;
+  justify-content: center;
+  min-width: 3.9rem;
+}
+
+@media (min-width: 1024px) {
+  .steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0 2rem;
+  }
+  .step {
+    padding: 3.75rem 0 0;
+  }
+  .step:not(:last-child)::before {
+    top: 1.25rem;
+    right: -1.25rem;
+    bottom: auto;
+    left: 3.25rem;
+    width: auto;
+    height: 1px;
+  }
+}

@@ -1,0 +1,297 @@
+/*
+ * Profile page. Tokens only (theme-aware). One column on phones; from 900px the
+ * details form sits beside a narrower column of shortcuts. Nothing is wider
+ * than its column, so the page never scrolls sideways.
+ */
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem 1.5rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.identity {
+  display: flex;
+  flex: 1 1 18rem;
+  align-items: center;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .avatar {
+    width: 3.5rem;
+    height: 3.5rem;
+    font-size: 1.35rem;
+  }
+}
+
+.who {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: clamp(1.75rem, 1.4rem + 1.6vw, 2.5rem);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.email {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.logout {
+  flex: none;
+  margin-left: auto;
+}
+
+@media (max-width: 639px) {
+  .logout {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+.cols {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1.75rem;
+}
+
+@media (min-width: 900px) {
+  .cols {
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 2rem;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .panel {
+    padding: 2rem;
+  }
+}
+
+.panelHead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+}
+
+.panelLede {
+  margin: 0;
+  max-width: 52ch;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.sideTitle {
+  margin: 0 0 0.65rem;
+}
+
+/* Shortcut rows: a whole-row link with an icon tile, title, one line, and an arrow. */
+.links {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-tint);
+  overflow: hidden;
+}
+
+.links > li + li {
+  border-top: 1px solid var(--color-line);
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 3.5rem;
+  padding: 0.85rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) ease;
+}
+
+.linkRow:hover {
+  background: var(--color-hover);
+}
+
+.linkRow:focus-visible {
+  outline-offset: -3px;
+}
+
+.linkIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: var(--radius-control);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.linkIcon > svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.linkText {
+  flex: 1;
+  min-width: 0;
+}
+
+.linkTitle {
+  display: block;
+  color: var(--color-fg-strong);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.linkMeta {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.linkArrow {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-fg-subtle);
+  transition:
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-out-soft);
+}
+
+.linkRow:hover .linkArrow {
+  color: var(--color-accent);
+  transform: translateX(2px);
+}
+
+.portal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.portalTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.portalTitle > svg {
+  flex: none;
+  width: 1.2rem;
+  height: 1.2rem;
+  color: var(--color-accent);
+}
+
+.portalText {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.portalUrl {
+  margin: 0;
+  color: var(--color-fg-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.pair {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 560px) {
+  .pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.verifyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  margin-top: 0.6rem;
+}
+
+.dataNote {
+  margin: 0;
+  color: var(--color-fg-subtle);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.skeletonHead {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding-bottom: 1.75rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.skeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}

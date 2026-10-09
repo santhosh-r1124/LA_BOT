@@ -1,6 +1,10 @@
 """Unit tests for app.services.legal_classifier — no database, no real network
 calls. Classification + risk scoring share one forced tool call (Phase 5); see
 docs/adr/0008-risk-scoring.md for why they weren't split into two.
+
+With no provider configured, or when the provider call fails, the deterministic
+rules classifier (app.services.rules_classifier, tested in
+tests/test_rules_classifier.py) answers instead.
 """
 
 from __future__ import annotations
@@ -9,7 +13,7 @@ import pytest
 
 from app.core.config import Settings
 from app.core.errors import ServiceUnavailableError
-from app.services import anthropic_client, legal_classifier
+from app.services import anthropic_client, legal_classifier, rules_classifier
 
 # Every provider unset -> "auto" resolves to nothing -> llm_not_configured.
 UNCONFIGURED = Settings(
@@ -83,11 +87,13 @@ def _tool_response(**overrides: object) -> _FakeResponse:
 # ---------------------------------------------------------------------------
 
 
-async def test_classify_query_raises_when_not_configured() -> None:
-    with pytest.raises(ServiceUnavailableError) as exc_info:
-        await legal_classifier.classify_query("hello", settings=UNCONFIGURED)
-    assert exc_info.value.code == "llm_not_configured"
-    assert exc_info.value.status_code == 503
+async def test_classify_query_uses_rules_when_not_configured() -> None:
+    question = "What are my legal options if my employer has not paid my salary for several months?"
+    result = await legal_classifier.classify_query(question, settings=UNCONFIGURED)
+    assert result == rules_classifier.classify(question)
+    assert result.category == "EMPLOYMENT_LAW"
+    assert result.risk_level == "HIGH"
+    assert result.is_out_of_scope is False
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +153,45 @@ async def test_classify_query_fails_safe_when_tool_not_called(
     assert result.risk_level == "HIGH"
 
 
-async def test_classify_query_wraps_transport_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_classify_query_falls_back_to_rules_on_a_provider_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A classification outage must not break chat: the transport failure is
+    # normalised to a ServiceUnavailableError (llm_error) and the rules answer.
     monkeypatch.setattr(anthropic_client, "get_client", lambda settings: _RaisingClient())
-    with pytest.raises(ServiceUnavailableError) as exc_info:
-        await legal_classifier.classify_query("hi", settings=CONFIGURED)
-    assert exc_info.value.code == "llm_error"
+    result = await legal_classifier.classify_query("I have been arrested", settings=CONFIGURED)
+    assert result.category == "CRIMINAL_LAW"
+    assert result.risk_level == "CRITICAL"
+
+
+async def test_classify_query_falls_back_to_rules_on_any_service_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _RateLimited:
+        name = "fake"
+        model = "fake"
+
+        async def complete_json(self, **_kwargs: object) -> dict[str, object]:
+            raise ServiceUnavailableError("limit reached", code="llm_rate_limited")
+
+    monkeypatch.setattr(legal_classifier, "get_provider", lambda settings: _RateLimited())
+    result = await legal_classifier.classify_query("What is GST?", settings=CONFIGURED)
+    assert (result.category, result.risk_level) == ("TAX_LAW", "LOW")
+
+
+async def test_classifier_logs_never_contain_the_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, object]] = []
+
+    def capture(event: str, **kwargs: object) -> None:
+        events.append({"event": event, **kwargs})
+
+    monkeypatch.setattr(legal_classifier.logger, "info", capture)
+    monkeypatch.setattr(legal_classifier.logger, "warning", capture)
+    secret = "my landlord Mr Zxqv Plumtree is refusing to return my deposit"
+    await legal_classifier.classify_query(secret, settings=UNCONFIGURED)
+
+    assert events
+    assert all(str(e["event"]).startswith("classifier_") for e in events)
+    assert "Plumtree" not in str(events)

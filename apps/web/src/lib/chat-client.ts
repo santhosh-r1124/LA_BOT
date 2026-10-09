@@ -12,9 +12,34 @@ export interface SourceOut {
   court?: string | null;
   date?: string | null;
   citation?: string | null;
+  case_name?: string | null;
   /** Hugging Face dataset id the document came from. */
   dataset?: string | null;
+  /** Opening of the retrieved passage, for in-chat inspection. */
+  excerpt?: string | null;
 }
+
+/** A directory advocate suggested for a HIGH/CRITICAL question (a sample listing when `is_sample`). */
+export interface RecommendedAdvocate {
+  id: string;
+  display_name: string | null;
+  practice_areas: string[];
+  state_code: string;
+  city: string;
+  experience_years: number | null;
+  /** The practice area that matched (the question's own, or a related one). */
+  matched_area: string;
+  exact_match: boolean;
+  same_state: boolean;
+  is_sample: boolean;
+}
+
+/**
+ * How a reply was produced. `ai`: a model wrote the text. `sources_only`: AI
+ * answers are off, so the server laid out the matching library passages
+ * instead (offline mode). Absent on older API versions, which only had `ai`.
+ */
+export type AnswerMode = 'ai' | 'sources_only';
 
 export interface ChatMessageOut {
   id: string;
@@ -30,6 +55,8 @@ export interface ChatMessageOut {
   // Assistant messages only: sources retrieved to ground the answer. Null
   // for out-of-scope replies; [] means retrieval found nothing relevant.
   sources?: SourceOut[] | null;
+  /** Not stored with a message today; present if the API starts returning it. */
+  answer_mode?: AnswerMode;
   created_at: string;
 }
 
@@ -38,6 +65,8 @@ export interface SendMessageResponse {
   user_message: ChatMessageOut;
   assistant_message: ChatMessageOut;
   disclaimer: string;
+  recommended_advocates?: RecommendedAdvocate[];
+  answer_mode?: AnswerMode;
 }
 
 export interface ConversationSummary {
@@ -60,7 +89,9 @@ export interface StreamStart {
   jurisdiction_scope: string;
   risk_level: ChatMessageOut['risk_level'];
   is_out_of_scope: boolean;
+  answer_mode?: AnswerMode;
   sources: SourceOut[] | null;
+  recommended_advocates?: RecommendedAdvocate[];
 }
 
 export interface StreamHandlers {
@@ -145,7 +176,14 @@ export async function streamMessage(
     const { frames, rest } = parseSseFrames(buffer);
     buffer = rest;
     for (const frame of frames) {
-      const data: unknown = JSON.parse(frame.data);
+      let data: unknown;
+      try {
+        data = JSON.parse(frame.data);
+      } catch {
+        // A garbled frame is a broken stream, not a crash: surface it like any
+        // other interruption so the caller shows its retry state.
+        throw new ApiRequestError(0, 'stream_interrupted', 'The response was interrupted. Try again.');
+      }
       if (frame.event === 'start') handlers.onStart?.(data as StreamStart);
       else if (frame.event === 'delta') handlers.onDelta?.((data as { text: string }).text);
       else if (frame.event === 'done') return data as SendMessageResponse;

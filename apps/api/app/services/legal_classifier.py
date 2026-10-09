@@ -11,6 +11,10 @@ See docs/adr/0008-risk-scoring.md.
 `app.services.risk_engine` turns a `risk_level` into a product decision
 (does this reply need an advocate recommendation?); this module only
 classifies, it doesn't decide what to do with the classification.
+
+Offline mode: with no provider configured, or when the provider call fails,
+`classify_query` answers from `app.services.rules_classifier` (deterministic
+vocabulary matching, no model) instead of failing, so chat keeps working.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import Settings
+from app.core.errors import ServiceUnavailableError
 from app.core.logging import get_logger
 from app.services.llm_provider import get_provider
 
@@ -116,19 +121,48 @@ class Classification:
     is_out_of_scope: bool
 
 
+def _classify_with_rules(message: str, *, reason: str) -> Classification:
+    """Deterministic fallback (see `app.services.rules_classifier`).
+
+    Imported here, not at module level: the rules module builds on this one's
+    ``Classification`` and vocabularies. The message itself is never logged.
+    """
+    from app.services import rules_classifier
+
+    result = rules_classifier.classify(message)
+    logger.info(
+        "classifier_rules_used",
+        reason=reason,
+        category=result.category,
+        risk_level=result.risk_level,
+        is_out_of_scope=result.is_out_of_scope,
+    )
+    return result
+
+
 async def classify_query(message: str, *, settings: Settings) -> Classification:
     """One structured call — the provider returns JSON matching
     ``_CLASSIFY_SCHEMA`` (tool call on Anthropic, JSON-schema output on
     Gemini, JSON mode on OpenAI-compatible APIs). Every field is re-validated
-    here; anything missing or unexpected falls back to a safe default."""
-    provider = get_provider(settings)
-    data = await provider.complete_json(
-        system=_CLASSIFIER_SYSTEM_PROMPT,
-        message=message,
-        schema=_CLASSIFY_SCHEMA,
-        schema_name=_SCHEMA_NAME,
-        max_tokens=settings.llm_classifier_max_tokens,
-    )
+    here; anything missing or unexpected falls back to a safe default.
+
+    With no provider configured (offline mode), or when the provider call
+    fails for any reason, the deterministic rules classifier answers instead:
+    a classification outage must not take chat down with it.
+    """
+    try:
+        provider = get_provider(settings)
+        data = await provider.complete_json(
+            system=_CLASSIFIER_SYSTEM_PROMPT,
+            message=message,
+            schema=_CLASSIFY_SCHEMA,
+            schema_name=_SCHEMA_NAME,
+            max_tokens=settings.llm_classifier_max_tokens,
+        )
+    except ServiceUnavailableError as exc:
+        if exc.code != "llm_not_configured":
+            logger.warning("classifier_provider_unavailable", code=exc.code)
+        return _classify_with_rules(message, reason=exc.code)
     if not data:
         # Unparsable/empty structured output — fail safe (see _RISK_FALLBACK).
         logger.warning("llm_classify_unparsable", provider=provider.name)

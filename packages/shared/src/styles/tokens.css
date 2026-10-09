@@ -1,0 +1,337 @@
+/*
+ * tokens.css — design tokens and the theme contract.
+ *
+ * THEME CONTRACT (identical in apps/web and apps/advocate-portal)
+ * - <html data-theme="light|dark"> forces a theme. No attribute = follow the OS
+ *   via prefers-color-scheme.
+ * - The choice is persisted in localStorage key "la-theme" ("light" | "dark";
+ *   key removed = system). A tiny inline script in each app layout applies it
+ *   before first paint.
+ * - DARK is the default token set (below, inside @theme static, so it lands on
+ *   :root). LIGHT is applied by (a) the OS media query, guarded so that an
+ *   explicit data-theme="dark" wins, and (b) an explicit data-theme="light"
+ *   block. The two light blocks MUST stay identical (see "KEEP IN SYNC").
+ * - Only the CORE tokens differ per theme. Everything marked "derived" is a
+ *   colour-mix() of core tokens and re-resolves automatically.
+ *
+ * Utilities: every --color-*, --font-*, --text-*, --radius-*, --shadow-* below
+ * is registered with Tailwind, so bg-canvas, text-fg-muted, border-line,
+ * text-ok, bg-ok-bg, rounded-panel, shadow-raised, font-display … all exist and
+ * follow the theme. Never use bg-white/…, text-black, text-red-300 and the
+ * like: they do not follow the theme.
+ */
+
+@theme static {
+  /* ================= COLOUR · core (DARK = default) ================= */
+
+  /* Surfaces */
+  --color-canvas: #0a0f1a; /* page background */
+  --color-elevated: #101827; /* opaque raised surface: menus, header, composer */
+  --color-sunken: #070b14; /* wells: segmented track, code blocks */
+  --color-field: rgb(255 255 255 / 0.035); /* input background */
+  --color-glass: rgb(255 255 255 / 0.04); /* .surface panel fill */
+  --color-tint: rgb(255 255 255 / 0.025); /* .surface-flat fill */
+  --color-glass-hover: rgb(255 255 255 / 0.065); /* interactive surface hover */
+  --color-hover: rgb(255 255 255 / 0.05); /* hover wash for rows, ghost buttons */
+  --color-pressed: rgb(255 255 255 / 0.09); /* active wash */
+
+  /* Ink */
+  --color-fg-strong: #f6f8fc; /* bold text, headings that must pop */
+  --color-fg: #e8ecf3; /* body text */
+  --color-fg-muted: #a6b0c3; /* secondary text */
+  --color-fg-subtle: #8490a8; /* tertiary: captions, placeholders (>= 4.5:1) */
+
+  /* Rules and control borders */
+  --color-line: rgb(255 255 255 / 0.08); /* hairlines, card borders */
+  --color-line-strong: rgb(255 255 255 / 0.15); /* emphasised borders, buttons */
+  --color-control: #5d697f; /* input/checkbox border (>= 3:1 non-text contrast) */
+  --color-control-hover: #7886a0;
+
+  /* Brand accent: one brass */
+  --color-accent: #d6b06a; /* fills (primary button) and accent text */
+  --color-accent-strong: #ebcd92; /* hover fill / emphasised accent text */
+  --color-accent-fg: #1b1508; /* text on an accent fill */
+  --color-brass: #d6b06a; /* purely decorative metal: logo, rules, glows */
+  --color-link: #ebcd92;
+  --color-link-hover: #f6dfae;
+
+  /* Status: each colour is readable as text on canvas AND on its own -bg tint */
+  --color-ok: #62d394;
+  --color-warn: #f2c14e;
+  --color-danger: #f27a7a;
+  --color-info: #8fb5ff;
+  --tone-tint: 12%; /* strength of the -bg tints below */
+
+  /* ================= COLOUR · derived (do not override per theme) ================= */
+  --color-accent-soft: color-mix(in srgb, var(--color-accent) 13%, transparent);
+  --color-accent-line: color-mix(in srgb, var(--color-accent) 38%, transparent);
+  --color-ring: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  --color-selection: color-mix(in srgb, var(--color-accent) 32%, transparent);
+
+  --color-ok-bg: color-mix(in srgb, var(--color-ok) var(--tone-tint), transparent);
+  --color-ok-line: color-mix(in srgb, var(--color-ok) 38%, transparent);
+  --color-warn-bg: color-mix(in srgb, var(--color-warn) var(--tone-tint), transparent);
+  --color-warn-line: color-mix(in srgb, var(--color-warn) 38%, transparent);
+  --color-danger-bg: color-mix(in srgb, var(--color-danger) var(--tone-tint), transparent);
+  --color-danger-line: color-mix(in srgb, var(--color-danger) 38%, transparent);
+  --color-info-bg: color-mix(in srgb, var(--color-info) var(--tone-tint), transparent);
+  --color-info-line: color-mix(in srgb, var(--color-info) 38%, transparent);
+
+  --color-skeleton-a: color-mix(in srgb, var(--color-fg) 5%, transparent);
+  --color-skeleton-b: color-mix(in srgb, var(--color-fg) 11%, transparent);
+  --color-scroll: color-mix(in srgb, var(--color-fg) 22%, transparent);
+  --color-scroll-hover: color-mix(in srgb, var(--color-fg) 38%, transparent);
+
+  /* ================= ELEVATION (theme-aware) ================= */
+  --shadow-edge: inset 0 1px 0 rgb(255 255 255 / 0.05); /* top highlight on glass */
+  --shadow-raised: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 10px 24px -16px rgb(0 0 0 / 0.75);
+  --shadow-float: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 18px 40px -18px rgb(0 0 0 / 0.85);
+  --shadow-overlay: 0 1px 0 rgb(255 255 255 / 0.06) inset, 0 32px 64px -24px rgb(0 0 0 / 0.9);
+
+  /* ================= TYPE ================= */
+  /* Self-hosted via @fontsource (imported in each app's globals.css). No
+     network at runtime. Fallbacks are chosen to be metrically close. */
+  --font-sans:
+    'Instrument Sans Variable', 'Instrument Sans', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Noto Sans Devanagari', 'Nirmala UI',
+    sans-serif;
+  --font-display:
+    'Newsreader Variable', 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino,
+    'Book Antiqua', Georgia, 'Noto Serif', 'Noto Serif Devanagari', 'Times New Roman', serif;
+  --font-mono:
+    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  /* Scale: size / line-height. Overrides Tailwind's defaults on purpose so every
+     existing text-* utility inherits the system's rhythm. */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.55;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.55;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.4;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.25;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 1.15;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 1.1;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1.05;
+  /* Fluid display sizes (headings that use .display) */
+  --text-display-sm: clamp(1.625rem, 1.35rem + 1.2vw, 2.125rem);
+  --text-display-md: clamp(1.875rem, 1.45rem + 1.9vw, 2.75rem);
+  --text-display-lg: clamp(2.25rem, 1.55rem + 3.2vw, 3.75rem);
+
+  /* ================= SHAPE ================= */
+  --radius-xs: 4px; /* tags, cite chips */
+  --radius-sm: 6px;
+  --radius-control: 8px; /* buttons, inputs */
+  --radius-item: 12px; /* list items, flat cards, alerts */
+  --radius-panel: 16px; /* panels, auth card */
+  --radius-pill: 999px;
+
+  /* ================= MOTION ================= */
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --animate-shimmer: la-shimmer 1.6s ease-in-out infinite;
+  --animate-spin-slow: la-spin 0.8s linear infinite;
+  --animate-rise: la-rise 480ms var(--ease-out-soft) both;
+  --animate-fade: la-fade 320ms ease-out both;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+
+    /* Non-colour tokens that are not Tailwind namespaces */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+    --space-8: 4.5rem;
+    --gutter: 1rem;
+    --section-gap: clamp(3rem, 2.2rem + 3.5vw, 5.5rem);
+    --page-max: 72rem;
+    --page-wide: 80rem;
+    --page-narrow: 46rem;
+    --measure: 66ch;
+    --dur-fast: 120ms;
+    --dur: 180ms;
+    --dur-slow: 320ms;
+    --z-header: 30;
+    --z-menu: 40;
+    --z-toast: 50;
+    --header-h: 3.5rem;
+
+    /* Page atmosphere (dark) */
+    --glow-a: rgb(214 176 106 / 0.07);
+    --glow-b: rgb(110 150 220 / 0.08);
+    --hero-glow: rgb(214 176 106 / 0.16);
+    --grid-line: rgb(255 255 255 / 0.045);
+
+    /* Image tokens (a data-URI cannot read currentColor, so one per theme) */
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a6b0c3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231b1508' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+
+    /* Helpers for theme-specific icons: .on-dark / .on-light */
+    --show-on-dark: inline-block;
+    --show-on-light: none;
+  }
+
+  /* ---- Explicit dark: nothing to override (defaults ARE dark); it exists so
+          that data-theme="dark" pins color-scheme even when the OS is light. */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  /* ================= LIGHT · KEEP IN SYNC (two identical blocks) ================= */
+
+  /* (a) OS prefers light, unless the user explicitly chose dark. */
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme='dark']) {
+      color-scheme: light;
+
+      --color-canvas: #f5f1e8;
+      --color-elevated: #fffdf8;
+      --color-sunken: #ece6d9;
+      --color-field: #fffefb;
+      --color-glass: rgb(255 253 248 / 0.8);
+      --color-tint: rgb(255 253 248 / 0.55);
+      --color-glass-hover: #fffefb;
+      --color-hover: rgb(60 45 15 / 0.055);
+      --color-pressed: rgb(60 45 15 / 0.1);
+
+      --color-fg-strong: #0d131f;
+      --color-fg: #1a2130;
+      --color-fg-muted: #4a5365;
+      --color-fg-subtle: #5a6376;
+
+      --color-line: rgb(52 40 18 / 0.12);
+      --color-line-strong: rgb(52 40 18 / 0.22);
+      --color-control: #8a8678;
+      --color-control-hover: #6b6759;
+
+      --color-accent: #80530f;
+      --color-accent-strong: #613c07;
+      --color-accent-fg: #fffaf0;
+      --color-brass: #b78a3a;
+      --color-link: #80530f;
+      --color-link-hover: #613c07;
+
+      --color-ok: #17603a;
+      --color-warn: #8c3f07;
+      --color-danger: #a61f19;
+      --color-info: #1a46a6;
+      --tone-tint: 8%;
+
+      --shadow-edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
+      --shadow-raised: 0 1px 2px rgb(52 40 18 / 0.06), 0 8px 20px -12px rgb(52 40 18 / 0.18);
+      --shadow-float: 0 2px 4px rgb(52 40 18 / 0.05), 0 18px 36px -14px rgb(52 40 18 / 0.24);
+      --shadow-overlay: 0 4px 8px rgb(52 40 18 / 0.06), 0 30px 60px -20px rgb(52 40 18 / 0.32);
+
+      --glow-a: rgb(183 138 58 / 0.17);
+      --glow-b: rgb(70 100 160 / 0.07);
+      --hero-glow: rgb(183 138 58 / 0.24);
+      --grid-line: rgb(52 40 18 / 0.06);
+
+      --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5365' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fffaf0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+
+      --show-on-dark: none;
+      --show-on-light: inline-block;
+    }
+  }
+
+  /* (b) Explicit light, regardless of the OS. */
+  :root[data-theme='light'] {
+    color-scheme: light;
+
+    --color-canvas: #f5f1e8;
+    --color-elevated: #fffdf8;
+    --color-sunken: #ece6d9;
+    --color-field: #fffefb;
+    --color-glass: rgb(255 253 248 / 0.8);
+    --color-tint: rgb(255 253 248 / 0.55);
+    --color-glass-hover: #fffefb;
+    --color-hover: rgb(60 45 15 / 0.055);
+    --color-pressed: rgb(60 45 15 / 0.1);
+
+    --color-fg-strong: #0d131f;
+    --color-fg: #1a2130;
+    --color-fg-muted: #4a5365;
+    --color-fg-subtle: #5a6376;
+
+    --color-line: rgb(52 40 18 / 0.12);
+    --color-line-strong: rgb(52 40 18 / 0.22);
+    --color-control: #8a8678;
+    --color-control-hover: #6b6759;
+
+    --color-accent: #80530f;
+    --color-accent-strong: #613c07;
+    --color-accent-fg: #fffaf0;
+    --color-brass: #b78a3a;
+    --color-link: #80530f;
+    --color-link-hover: #613c07;
+
+    --color-ok: #17603a;
+    --color-warn: #8c3f07;
+    --color-danger: #a61f19;
+    --color-info: #1a46a6;
+    --tone-tint: 8%;
+
+    --shadow-edge: inset 0 1px 0 rgb(255 255 255 / 0.7);
+    --shadow-raised: 0 1px 2px rgb(52 40 18 / 0.06), 0 8px 20px -12px rgb(52 40 18 / 0.18);
+    --shadow-float: 0 2px 4px rgb(52 40 18 / 0.05), 0 18px 36px -14px rgb(52 40 18 / 0.24);
+    --shadow-overlay: 0 4px 8px rgb(52 40 18 / 0.06), 0 30px 60px -20px rgb(52 40 18 / 0.32);
+
+    --glow-a: rgb(183 138 58 / 0.17);
+    --glow-b: rgb(70 100 160 / 0.07);
+    --hero-glow: rgb(183 138 58 / 0.24);
+    --grid-line: rgb(52 40 18 / 0.06);
+
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5365' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fffaf0' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+
+    --show-on-dark: none;
+    --show-on-light: inline-block;
+  }
+}
+
+@keyframes la-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@keyframes la-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes la-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes la-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -88,6 +88,32 @@ describe('chatClient', () => {
     expect(headers.get('Authorization')).toBe('Bearer the-token');
   });
 
+  it('sendMessage returns answer_mode when the API provides it', async () => {
+    const message = (id: string, role: string, content: string) => ({
+      id,
+      role,
+      content,
+      legal_category: null,
+      jurisdiction_scope: null,
+      is_out_of_scope: null,
+      created_at: '2026-01-01T00:00:00Z',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          conversation_id: 'c1',
+          user_message: message('m1', 'user', 'hi'),
+          assistant_message: message('m2', 'assistant', 'hello'),
+          disclaimer: 'General information only.',
+          answer_mode: 'sources_only',
+        }),
+      ),
+    );
+    const result = await chatClient.sendMessage('hi', null, null);
+    expect(result.answer_mode).toBe('sources_only');
+  });
+
   it('listConversations requires a token and hits the right endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     vi.stubGlobal('fetch', fetchMock);

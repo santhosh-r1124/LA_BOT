@@ -20,14 +20,18 @@ export interface LoginPayload {
   password: string;
 }
 
+/**
+ * `PATCH /advocates/me` only changes the fields that are present. `null` clears
+ * the three optional values (fee, bio, experience); the others cannot be null.
+ */
 export interface AdvocateProfileUpdatePayload {
   practice_areas?: string[];
   state_code?: string;
   city?: string;
   languages?: string[];
-  consultation_fee?: string;
-  bio?: string;
-  experience_years?: number;
+  consultation_fee?: string | null;
+  bio?: string | null;
+  experience_years?: number | null;
 }
 
 export interface MessageResponse {

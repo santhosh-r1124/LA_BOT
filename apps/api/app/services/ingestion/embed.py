@@ -47,6 +47,11 @@ def _is_rate_limit(exc: BaseException) -> bool:
 
 
 def _client(settings: Settings) -> genai.Client:
+    if settings.embedding_provider == "none":
+        raise ServiceUnavailableError(
+            "Embeddings are disabled (EMBEDDING_PROVIDER=none); search is keyword-only.",
+            code="embeddings_not_configured",
+        )
     if not settings.gemini_api_key:
         raise ServiceUnavailableError(
             "Embeddings aren't configured yet (missing GEMINI_API_KEY).",

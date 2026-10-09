@@ -1,0 +1,94 @@
+/* Styles for the form primitives. Tokens only. */
+
+.passwordWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.passwordInput {
+  padding-right: 3rem;
+}
+
+.reveal {
+  position: absolute;
+  top: 50%;
+  right: 0.15rem;
+  transform: translateY(-50%);
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  color: var(--color-fg-muted);
+}
+
+.rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--color-fg-subtle);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.rule > svg {
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: 0.1rem;
+}
+
+.ruleMet {
+  color: var(--color-ok);
+}
+
+/* A fieldset has a min-width of min-content by default; let it shrink. */
+.chipField {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.chipField > legend {
+  padding: 0;
+  margin-bottom: 0.55rem;
+}
+
+.chipBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chipButton {
+  min-height: 2.5rem;
+  padding-inline: 0.95rem;
+  font-size: var(--text-sm);
+}
+
+.chipFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.chipFoot > button {
+  min-height: 2.5rem;
+  padding-inline: 0.25rem;
+}
+
+.message {
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+
+.message:focus-visible {
+  outline-offset: 3px;
+}

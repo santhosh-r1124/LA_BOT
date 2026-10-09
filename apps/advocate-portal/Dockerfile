@@ -19,7 +19,9 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
 FROM base AS build
-ENV NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=standalone
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ENV NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=standalone \
+    NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/apps/advocate-portal/node_modules ./apps/advocate-portal/node_modules
 COPY . .

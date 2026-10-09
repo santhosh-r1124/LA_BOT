@@ -1,42 +1,49 @@
 # @legal-platform/database
 
-Thin, typed PostgreSQL client for **Node** consumers (scripts, seeders, the
-occasional Next.js route handler that needs direct DB access).
+A thin, pooled PostgreSQL client for **Node** code that needs direct database access (scripts,
+seeders, a server-side route handler). Built on [`postgres`](https://github.com/porsager/postgres).
+
+**Status:** available, but not used yet. Neither the website nor the advocate portal imports it: both
+talk to the API only, and the backend owns all data access. The `Database` type in `src/types.ts` is
+an empty placeholder (`[table: string]: Record<string, unknown>`), so queries are untyped until you
+generate real types.
 
 ## Schema ownership
 
-The database schema is **owned by `apps/api`** — SQLAlchemy 2.0 models plus
-Alembic migrations. This package does **not** define or migrate tables. See
-[`docs/adr/0003-schema-and-migrations.md`](../../docs/adr/0003-schema-and-migrations.md).
+The database schema is **owned by `apps/api`**: SQLAlchemy 2.0 models plus Alembic migrations. This
+package does not define or migrate tables. See
+[`docs/adr/0003-schema-and-migrations.md`](../../docs/adr/0003-schema-and-migrations.md). Prefer
+calling the API over querying the database from the frontends.
 
 ## Usage
 
 ```ts
 import { createDbClient } from '@legal-platform/database';
 
-const sql = createDbClient(); // reads DATABASE_URL_TS / DATABASE_URL
+const sql = createDbClient(); // reads DATABASE_URL_TS, then DATABASE_URL
 const rows = await sql`select 1 as ok`;
 await sql.end();
 ```
 
-The app's `DATABASE_URL` uses a SQLAlchemy scheme (`postgresql+asyncpg://…`);
-`createDbClient` strips the `+driver` suffix automatically. You can also set
-`DATABASE_URL_TS` to a plain `postgresql://…` URL specifically for Node tools.
+The API's `DATABASE_URL` uses a SQLAlchemy scheme (`postgresql+asyncpg://...`); `createDbClient`
+strips the `+driver` part automatically. To give Node tools a plain URL instead, set
+`DATABASE_URL_TS=postgresql://...`. Options: `connectionString`, `max` (pool size, default 10) and
+`statementTimeoutSeconds` (default 30).
 
-## Regenerating `src/types.ts`
+For the local Docker database the connection string is
+`postgresql://legal:legal_dev_password@localhost:5432/legal_platform` (start it with `pnpm stack:up`
+and migrate with `pnpm db:migrate`).
 
-Once tables exist (Phase 1+), regenerate types from the **migrated** local
-database:
+## Generating `src/types.ts`
+
+The file is a placeholder. To replace it with real types, migrate the local database
+(`pnpm stack:up` then `pnpm db:migrate`), run a generator of your choice against it (for example
+`kysely-codegen`, which is not a dependency of this repo), and commit the result so typechecks stay
+deterministic in CI. Keep the exported name `Database`, or update `src/index.ts` to match.
+
+## Checks
 
 ```bash
-# 1. bring up the stack and migrate
-pnpm stack:up && pnpm db:migrate
-
-# 2. generate (kysely-codegen shown; swap for your preferred tool)
-pnpm --filter @legal-platform/database exec \
-  kysely-codegen --dialect postgres \
-  --url "postgresql://legal:legal_dev_password@localhost:5432/legal_platform" \
-  --out-file src/types.ts
+pnpm --filter @legal-platform/database typecheck
+pnpm --filter @legal-platform/database lint
 ```
-
-Commit the regenerated file so typechecks are deterministic in CI.

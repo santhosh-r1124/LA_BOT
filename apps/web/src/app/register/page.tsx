@@ -1,115 +1,17 @@
-'use client';
+import type { Metadata } from 'next';
+import { firstParam, safeNextPath } from '../login/_shared/auth-logic';
+import { RegisterForm } from './register-form';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
-import { ApiRequestError } from '@/lib/api-client';
-import { useAuth } from '@/lib/auth-context';
-import { usePlatformStatus } from '@/lib/status-client';
-import { buttonClass, Field, inputClass } from '@/components/form';
+export const metadata: Metadata = {
+  title: 'Create an account',
+  description: 'Create a free Legal Advisor account to keep your conversation history.',
+};
 
-export default function RegisterPage() {
-  const router = useRouter();
-  const { register } = useAuth();
-  const { state: statusState } = usePlatformStatus();
-  const openLogin =
-    statusState.kind === 'ready' && (statusState.status.features?.open_login ?? false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [stateCode, setStateCode] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      await register({
-        email,
-        password,
-        display_name: displayName || undefined,
-        state_code: stateCode || undefined,
-      });
-      router.push('/profile');
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong. Try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <main className="surface auth-card">
-      <div>
-        <h1 className="display text-2xl">Create an account</h1>
-        <p className="text-fg-muted mt-1 text-sm">
-          Free — ask legal questions, generate document guidance, and find an advocate.
-        </p>
-      </div>
-
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <Field label="Email">
-          <input
-            type={openLogin ? 'text' : 'email'}
-            inputMode="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-        <Field
-          label="Password"
-          hint={openLogin ? 'Demo mode: any password works.' : 'At least 8 characters.'}
-        >
-          <input
-            type="password"
-            required={!openLogin}
-            minLength={openLogin ? undefined : 8}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Name (optional)">
-          <input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="State (optional)" hint="Two-letter code, e.g. KA, MH, DL.">
-          <input
-            type="text"
-            maxLength={2}
-            value={stateCode}
-            onChange={(e) => setStateCode(e.target.value.toUpperCase())}
-            className={inputClass}
-          />
-        </Field>
-
-        {error && (
-          <p role="alert" className="field-error text-sm">
-            {error}
-          </p>
-        )}
-
-        <button type="submit" disabled={submitting} className={buttonClass}>
-          {submitting ? 'Creating account…' : 'Create account'}
-        </button>
-      </form>
-
-      <p className="text-fg-muted text-center text-sm">
-        Already have an account?{' '}
-        <Link href="/login" className="link font-medium">
-          Log in
-        </Link>
-      </p>
-    </main>
-  );
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const next = safeNextPath(firstParam((await searchParams).next));
+  return <RegisterForm next={next} />;
 }

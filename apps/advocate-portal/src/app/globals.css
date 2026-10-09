@@ -1,5 +1,17 @@
 @import 'tailwindcss';
-/* Shared tokens + component classes (glass surfaces, buttons, inputs, badges).
+
+/* Self-hosted fonts (no network at runtime). Pairing documented in
+   docs/design-system.md: Newsreader (display) · Instrument Sans (text/UI) ·
+   IBM Plex Mono (citations, ids). Only latin + latin-ext subsets are bundled. */
+@import '@fontsource-variable/newsreader/opsz.css';
+@import '@fontsource-variable/newsreader/opsz-italic.css';
+@import '@fontsource-variable/instrument-sans/index.css';
+@import '@fontsource-variable/instrument-sans/wght-italic.css';
+@import '@fontsource/ibm-plex-mono/latin-400.css';
+@import '@fontsource/ibm-plex-mono/latin-ext-400.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+
+/* Shared tokens, themes (light/dark) and component classes.
    See packages/shared/src/styles/design-system.css. */
 @import '@legal-platform/shared/styles/design-system.css';
 /* Tailwind scans this app's sources automatically; nothing else to register. */

@@ -1,0 +1,8 @@
+/*
+ * The initials in the header avatar are drawn from a data attribute, so they are
+ * not text in the page. The account button is named "Account menu for <name>",
+ * and visible text that is not in that name would be a name mismatch.
+ */
+.initials::before {
+  content: attr(data-initials);
+}

@@ -1,0 +1,383 @@
+/*
+ * Advocate directory. Built from design-system tokens only, so every rule
+ * follows the light and dark themes. From 1024px the filters are a sticky rail
+ * beside the results; below that they collapse behind a "Filters" button.
+ */
+
+/* ---- Hero ------------------------------------------------------------------- */
+/* Same scale and split as the document assistant's header: title and lede on the
+   left, the sample-data notice beside them from 960px. */
+.hero {
+  display: grid;
+  gap: 1.5rem;
+  margin-bottom: clamp(1.75rem, 1.2rem + 2vw, 2.5rem);
+}
+@media (min-width: 960px) {
+  .heroSplit {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+    align-items: end;
+    gap: 3rem;
+  }
+}
+
+/* ---- Frame ------------------------------------------------------------------ */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .layout {
+    grid-template-columns: 17rem minmax(0, 1fr);
+    gap: 2.25rem;
+    align-items: start;
+  }
+}
+
+.rail {
+  min-width: 0;
+}
+@media (min-width: 1024px) and (min-height: 600px) {
+  .rail {
+    position: sticky;
+    top: calc(var(--header-h) + 1rem);
+  }
+}
+
+/* ---- Filter panel -------------------------------------------------------------- */
+.toggle {
+  width: 100%;
+  min-height: 2.75rem;
+  justify-content: space-between;
+}
+.toggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.toggleCount {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding-inline: 0.35rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.chevron {
+  transition: transform var(--dur) ease;
+}
+.toggle[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+}
+@media (min-width: 1024px) {
+  .toggle {
+    display: none;
+  }
+}
+
+.panel {
+  display: none;
+  margin-top: 0.75rem;
+  padding: 1.1rem;
+}
+.panel[data-open='true'] {
+  display: block;
+}
+@media (min-width: 1024px) {
+  .panel {
+    display: block;
+    margin-top: 0;
+    padding: 1.25rem;
+  }
+}
+
+.panelHead {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+@media (min-width: 1024px) {
+  .panelHead {
+    display: flex;
+  }
+}
+.panelTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-fg-strong);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+.panelTitle svg {
+  color: var(--color-accent);
+}
+
+/* The browser's own datalist triangle (solid white in dark mode) clashes with the
+   thin chevrons on the selects; typing and the arrow keys still open the list. */
+.cityInput::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.showResults {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 1.1rem;
+}
+@media (min-width: 1024px) {
+  .showResults {
+    display: none;
+  }
+}
+
+/* ---- Results header ----------------------------------------------------------------- */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+.count {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  color: var(--color-fg-strong);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.countNumber {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.sub {
+  margin-top: 0.3rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+.chip {
+  min-height: 2.25rem;
+  max-width: 100%;
+}
+/* Fingers need more room than a pointer. */
+@media (max-width: 767px), (pointer: coarse) {
+  .chip,
+  .chipsClear {
+    min-height: 2.75rem;
+  }
+}
+/* fg-muted, not fg-subtle: the subtle ink is under 4.5:1 on the light chip fill. */
+.chipName {
+  color: var(--color-fg-muted);
+  font-weight: 500;
+}
+.chipValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Results ---------------------------------------------------------------------------- */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.1rem;
+  transition: opacity var(--dur) ease;
+}
+.list[data-stale='true'] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.3rem 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-tint);
+  transition:
+    border-color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+.row:hover {
+  border-color: var(--color-accent-line);
+  background: var(--color-glass-hover);
+  box-shadow: var(--shadow-raised);
+}
+.rowAvatar {
+  grid-row: 1 / span 3;
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.1rem;
+}
+@media (min-width: 640px) {
+  .rowAvatar {
+    width: 3.25rem;
+    height: 3.25rem;
+    font-size: 1.3rem;
+  }
+}
+.rowTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  min-width: 0;
+}
+.name {
+  color: var(--color-fg-strong);
+  font-size: var(--text-base);
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+/* The whole row is the click target; the name is the link's accessible name. */
+.link {
+  color: inherit;
+  text-decoration: none;
+}
+.link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-item);
+}
+.link:focus-visible {
+  outline: none;
+}
+.link:focus-visible::after {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.1rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.metaItem svg {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-fg-subtle);
+}
+.areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+.go {
+  align-self: center;
+  grid-row: 1 / span 3;
+  grid-column: 3;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--color-fg-subtle);
+  transition:
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+.row:hover .go {
+  color: var(--color-accent);
+  transform: translateX(2px);
+}
+@media (max-width: 479px) {
+  .row {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 0.9rem;
+    gap: 0.3rem 0.85rem;
+  }
+  .go {
+    display: none;
+  }
+}
+
+/* ---- Skeleton -------------------------------------------------------------------------------- */
+/* The server-side fallback (see directory-loading.tsx): always taller than the screen. */
+.loadingPage {
+  min-height: 100dvh;
+}
+.skToggle {
+  height: 2.75rem;
+  border-radius: var(--radius-control);
+}
+.skPanel {
+  display: none;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .skToggle {
+    display: none;
+  }
+  .skPanel {
+    display: flex;
+  }
+}
+
+.skRow {
+  display: grid;
+  align-content: start;
+  min-height: 7.25rem; /* the height of a listing with one line of details and a badge */
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-tint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row:hover .go {
+    transform: none;
+  }
+}

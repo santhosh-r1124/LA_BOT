@@ -1,0 +1,239 @@
+/*
+ * Advocate profile. Design-system tokens only, so it follows both themes. It uses
+ * the page's full width, so its left edge lines up with the header and the
+ * directory list. Two columns from 900px: the profile on the left, contact
+ * details on the right.
+ */
+
+.hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.1rem;
+  padding: 1.25rem;
+}
+@media (min-width: 640px) {
+  .hero {
+    gap: 1.5rem;
+    padding: 1.75rem;
+  }
+}
+.heroAvatar {
+  width: 3.75rem;
+  height: 3.75rem;
+  font-size: 1.45rem;
+}
+@media (min-width: 640px) {
+  .heroAvatar {
+    width: 5rem;
+    height: 5rem;
+    font-size: 1.9rem;
+  }
+}
+.heroBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.heroName {
+  overflow-wrap: anywhere;
+}
+.heroMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.25rem;
+  color: var(--color-fg-muted);
+}
+.heroMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.heroMetaItem svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--color-fg-subtle);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'main'
+    'aside';
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    grid-template-areas: 'main aside';
+    gap: 2rem;
+    align-items: start;
+  }
+}
+.main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  min-width: 0;
+}
+.aside {
+  grid-area: aside;
+  min-width: 0;
+}
+/* Narrow screens: a verified advocate's contact card comes straight after the
+   header, because reaching them is what the page is for. Sample listings keep
+   their (made-up) contact card after the details. */
+@media (max-width: 899px) {
+  .grid[data-contact-first='true'] {
+    grid-template-areas:
+      'aside'
+      'main';
+  }
+}
+@media (min-width: 900px) and (min-height: 560px) {
+  .aside {
+    position: sticky;
+    top: calc(var(--header-h) + 1rem);
+  }
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.sectionHead svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-accent);
+}
+.areas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.areas > li {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.8125rem;
+}
+.facts {
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-tint);
+}
+.bio {
+  max-width: 66ch;
+  color: var(--color-fg);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Contact ------------------------------------------------------------------ */
+.contact {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.contactRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-line);
+}
+.contactLabel {
+  color: var(--color-fg-subtle);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.contactHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.contactValue {
+  min-width: 0;
+  color: var(--color-fg-strong);
+  font-size: var(--text-base);
+  font-weight: 550;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* ---- Similar advocates ------------------------------------------------------------ */
+.similar {
+  margin-top: 2.5rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--color-line);
+}
+.similarGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+@media (min-width: 720px) {
+  .similarGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.similarItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-tint);
+  transition:
+    border-color var(--dur-fast) ease,
+    background-color var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease;
+}
+.similarItem:hover {
+  border-color: var(--color-accent-line);
+  background: var(--color-glass-hover);
+  box-shadow: var(--shadow-raised);
+}
+.similarName {
+  color: var(--color-fg-strong);
+  font-weight: 650;
+  line-height: 1.3;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.similarName::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-item);
+}
+.seeAll {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: 0.5rem;
+  margin-right: -0.5rem;
+}
+.similarName:focus-visible {
+  outline: none;
+}
+.similarName:focus-visible::after {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.similarMeta {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
