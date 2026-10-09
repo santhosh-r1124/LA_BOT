@@ -156,12 +156,12 @@ export function AskBox() {
 
       <div role="group" aria-label="Example questions" className="flex flex-col gap-2">
         <p className="caps subtle">Or start from an example</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {EXAMPLES.map((example) => (
             <button
               key={example.label}
               type="button"
-              className="chip min-h-10"
+              className="chip min-h-10 justify-center"
               onClick={() => fill(example.question)}
             >
               {example.label}

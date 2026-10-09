@@ -75,7 +75,7 @@ export function Composer({
           maxLength={MAX_QUESTION_LENGTH}
           enterKeyHint="send"
           autoComplete="off"
-          placeholder="Ask a question about Indian law…"
+          placeholder="Ask about Indian law…"
           aria-describedby="composer-hint"
           aria-invalid={showEmptyHint || undefined}
           className="text-[1rem]"
@@ -83,7 +83,7 @@ export function Composer({
         {sending ? (
           <button type="button" className="btn btn-secondary" onClick={onStop} aria-label="Stop the reply">
             <StopIcon />
-            <span className={styles.sendLabel}>Stop</span>
+            Stop
           </button>
         ) : (
           <button
@@ -106,23 +106,25 @@ export function Composer({
               Write your question first.
             </span>
           ) : sending ? (
-            <>
-              Working on it. Press <kbd className="kbd">Esc</kbd> to stop.
-            </>
+            <span className={styles.hintLine}>
+              Working on it.
+              <span className={styles.keyHint}>
+                {' '}
+                Press <kbd className="kbd">Esc</kbd> to stop.
+              </span>
+            </span>
           ) : (
-            <span className={styles.keyHint}>
+            <span className={`${styles.hintLine} ${styles.keyHint}`}>
               <kbd className="kbd">Enter</kbd> to send &middot; <kbd className="kbd">Shift</kbd>
               {' + '}
               <kbd className="kbd">Enter</kbd> for a new line
             </span>
           )}
         </p>
-        {nearLimit ? (
-          <span className={`${styles.counter} ${styles.counterNear}`} aria-live="polite">
+        {nearLimit && (
+          <span className={`${styles.hintLine} ${styles.counter} ${styles.counterNear}`} aria-live="polite">
             {value.length.toLocaleString('en-IN')} / {MAX_QUESTION_LENGTH.toLocaleString('en-IN')}
           </span>
-        ) : (
-          <span>General information, not legal advice</span>
         )}
       </div>
     </form>

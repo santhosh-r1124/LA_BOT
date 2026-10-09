@@ -35,7 +35,9 @@ const SUGGESTIONS: Array<{ href: string; Icon: IconComponent; title: string; tex
 export default function NotFound() {
   return (
     <main className="hero-bg">
-      <span className="hero-sign" aria-hidden="true">
+      {/* The ghosted § sits behind the page title on wide screens only; on phones
+          and tablets it would show through the list of links. */}
+      <span className="hero-sign max-lg:hidden" aria-hidden="true">
         §
       </span>
       <div className="page page-narrow flex flex-col items-start gap-6 pb-16 pt-14 sm:pt-20">

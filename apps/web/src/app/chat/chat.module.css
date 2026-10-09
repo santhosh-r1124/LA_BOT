@@ -9,7 +9,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   width: 100%;
-  max-width: var(--page-wide);
+  /* Same width and gutters as the site header, so the sidebar lines up with the logo. */
+  max-width: var(--page-max);
   margin-inline: auto;
   padding-inline: var(--gutter);
 }
@@ -81,6 +82,13 @@
   display: flex;
   gap: 0.5rem;
 }
+.pageEyebrow {
+  margin: 0;
+}
+/* Small buttons stay at least 40px tall on this page, whatever the pointer. */
+.shell :global(.btn-sm) {
+  min-height: 2.5rem;
+}
 .mobileOnly {
   display: inline-flex;
 }
@@ -132,7 +140,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  margin-top: 0.15rem;
+  min-height: 2.5rem;
+  margin-block: -0.35rem -0.45rem;
   color: var(--color-link);
   font-weight: 600;
   cursor: pointer;
@@ -180,7 +189,8 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.3rem;
-  scroll-margin-top: calc(var(--header-h) + 1rem);
+  /* The page already reserves the header height as scroll padding. */
+  scroll-margin-top: 0.5rem;
 }
 .notSent {
   margin: 0;
@@ -222,11 +232,113 @@
   font-size: var(--text-sm);
   font-weight: 650;
 }
+.replyMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
 .badges {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-bottom: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.badgeBrass {
+  color: var(--color-accent);
+}
+.riskNote {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+.replyText {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.stackAfter {
+  margin-top: 1.1rem;
+}
+.lead {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--color-fg);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.leadMuted {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.askBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.askLabel {
+  margin: 0;
+  color: var(--color-fg-subtle);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.askList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-item);
+  background: var(--color-elevated);
+  overflow: hidden;
+}
+.askList > li + li {
+  border-top: 1px solid var(--color-line);
+}
+.askBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.9rem;
+  border: 0;
+  background: none;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) ease;
+}
+.askBtn:hover {
+  background: var(--color-hover);
+}
+.askBtn:focus-visible {
+  outline-offset: -2px;
+}
+.askBtn svg {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-fg-subtle);
+}
+.askBtn:hover svg {
+  color: var(--color-accent);
 }
 .intro {
   max-width: 60ch;
@@ -467,6 +579,13 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+@media (max-width: 479px) {
+  /* Equal-width rows, so no button sits alone and misaligned on a second line. */
+  .actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 /* ---- Advocates --------------------------------------------------------------- */
 .advocates {
@@ -554,6 +673,26 @@
   color: var(--color-fg-subtle);
   font-size: 0.8125rem;
 }
+.urgent {
+  display: flex;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-line);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.urgent svg {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.15rem;
+  color: var(--color-danger);
+}
+.urgent strong {
+  color: var(--color-fg-strong);
+}
 
 /* ---- Pending ----------------------------------------------------------------- */
 .pending {
@@ -602,33 +741,31 @@
   gap: 1.75rem;
   padding-block: clamp(1rem, 4vh, 2.5rem) 1.5rem;
 }
-.heroRow {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-.heroMark {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border: 1px solid var(--color-accent-line);
-  border-radius: var(--radius-item);
-  background: linear-gradient(150deg, var(--color-accent-soft), transparent 85%);
-  color: var(--color-accent-strong);
-  font-family: var(--font-display);
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1;
-  box-shadow: var(--shadow-edge);
+.heroTitle {
+  margin: 0;
+  text-wrap: balance;
 }
 .heroLede {
   max-width: 62ch;
-  margin: 0.85rem 0 0;
+  margin: 0.75rem 0 0;
   color: var(--color-fg-muted);
   font-size: 1rem;
   line-height: 1.6;
+}
+.heroNotices {
+  margin-top: 1.25rem;
+}
+.starterIntro {
+  max-width: 62ch;
+  margin: 0 0 1rem;
+  color: var(--color-fg-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.starterNote {
+  margin: 1rem 0 0;
+  color: var(--color-fg-subtle);
+  font-size: 0.8125rem;
 }
 .starterGrid {
   display: grid;
@@ -638,6 +775,10 @@
 @media (min-width: 720px) {
   .starterGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* An odd group out takes the full row instead of leaving a hole. */
+  .starterGrid > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 .starterTitle {
@@ -724,23 +865,36 @@
   bottom: 0;
   z-index: 20;
   margin-top: auto;
-  padding: 0.75rem 0 calc(0.6rem + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, var(--color-canvas) 80%, transparent);
+  padding: 0.5rem 0 calc(0.6rem + env(safe-area-inset-bottom));
+  background: var(--color-canvas);
+}
+/* A soft fade, so lines of text scrolling under the box do not end in a hard edge. */
+.dock::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 100% 0;
+  height: 1.75rem;
+  background: linear-gradient(to top, var(--color-canvas), transparent);
+  pointer-events: none;
 }
 .composerMeta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.25rem 1rem;
-  min-height: 1.4rem;
-  padding: 0.4rem 0.35rem 0;
+  gap: 0 1rem;
+  padding-inline: 0.35rem;
   color: var(--color-fg-subtle);
   font-size: 0.75rem;
   line-height: 1.4;
 }
 .composerHint {
   margin: 0;
+}
+/* Each line carries its own top space, so an empty row (touch screens) takes none. */
+.hintLine {
+  display: block;
+  padding-top: 0.4rem;
 }
 @media (pointer: coarse), (max-width: 639px) {
   .keyHint {
@@ -751,6 +905,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  padding-top: 0.4rem;
   color: var(--color-warn);
   font-weight: 600;
 }
@@ -779,13 +934,20 @@
     padding-inline: 1rem;
   }
 }
+/*
+ * Nothing to send yet: a quiet outlined button that keeps AA contrast, instead of
+ * a washed-out brass one. It turns brass as soon as there is text.
+ */
 .sendBtnIdle {
-  opacity: 0.55;
+  border-color: var(--color-line-strong);
+  background: var(--color-field);
+  color: var(--color-fg-muted);
   box-shadow: none;
+  opacity: 1;
 }
 .disclaimer {
-  margin: 0;
-  padding: 0 0 1.25rem;
+  margin: auto 0 0;
+  padding: 1rem 0 1.25rem;
   color: var(--color-fg-subtle);
   font-size: 0.75rem;
   line-height: 1.6;
@@ -886,6 +1048,11 @@
   margin: 0;
   color: var(--color-fg);
   text-align: right;
+}
+.setupSub {
+  display: block;
+  color: var(--color-fg-subtle);
+  font-size: 0.75rem;
 }
 
 /* ---- Drawer (history on small screens) ---------------------------------------- */

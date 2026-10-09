@@ -28,8 +28,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     // suppressHydrationWarning: the inline script below may set data-theme on
-    // <html> before React hydrates.
-    <html lang="en" suppressHydrationWarning>
+    // <html> before React hydrates. data-scroll-behavior tells Next that smooth
+    // scrolling is intended, so it keeps disabling it during route changes
+    // (otherwise a new page would scroll down from the old position).
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {/* No-flash theme: applies a saved light/dark choice before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />

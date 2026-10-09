@@ -4,6 +4,7 @@ import { MANDATORY_DISCLAIMER } from '@legal-platform/shared';
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertIcon, InfoIcon, RefreshIcon } from '@/components/icons';
+import { advocateClient } from '@/lib/advocate-client';
 import {
   chatClient,
   type AnswerMode,
@@ -17,6 +18,7 @@ import { usePlatformStatus } from '@/lib/status-client';
 import {
   classifyChatError,
   inferAnswerMode,
+  isHighStakes,
   readLlmMode,
   readQuestionParam,
   type ChatFailure,
@@ -25,12 +27,20 @@ import {
 import { HistoryIcon, PlusIcon } from './chat-icons';
 import styles from './chat.module.css';
 import { Composer } from './composer';
-import { EmptyState } from './empty-state';
+import { EmptyState, type StarterLibrary } from './empty-state';
 import { AssistantReply, UserMessage, type ReplyData } from './message';
 import { EmptyLibraryNotice, ModeNotice, NoticeSkeleton, StatusErrorNotice } from './notices';
 import { Drawer, HistoryPanel, type SetupSummary } from './sidebar';
 
 const CONVERSATION_KEY = 'lp_chat_conversation_id';
+
+/**
+ * Shown above the box while AI answers are off. The API's own disclaimer
+ * speaks of "this AI", which would be untrue then, and the site footer already
+ * carries the full wording, so this is the short form.
+ */
+const OFFLINE_DISCLAIMER =
+  'Library passages and template drafts are general information, not legal advice. For your own situation, speak to a qualified advocate.';
 
 /**
  * `retryText`: the question can be resent as is. `keptText`: the question is
@@ -106,6 +116,9 @@ export default function ChatPage() {
   const pendingUserRef = useRef<HTMLLIElement | null>(null);
   const failureRef = useRef<HTMLDivElement | null>(null);
   const mainRef = useRef<HTMLElement | null>(null);
+  const dockRef = useRef<HTMLDivElement | null>(null);
+  /** Messages whose advocate list was already looked up again after a reload. */
+  const advocateLookupRef = useRef<Set<string>>(new Set());
   const sendRef = useRef<(text?: string) => Promise<void>>(async () => {});
 
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -157,7 +170,12 @@ export default function ChatPage() {
   const fixtureOnly = sourceDatasets.length > 0 && sourceDatasets.every((s) => /fixture/i.test(s.dataset));
   const sampleAdvocates = status?.advocate_directory.sample_advocates ?? null;
   const totalAdvocates = status?.advocate_directory.verified_advocates ?? null;
-  const advocatesAreSamples = sampleAdvocates !== null && sampleAdvocates > 0 && sampleAdvocates === totalAdvocates;
+  // "Mostly samples" counts: a directory with 1,000 synthetic listings and a few real ones is still sample data.
+  const advocatesAreSamples = sampleAdvocates !== null && sampleAdvocates > 0;
+  /** Only the bundled test passages are loaded, so most questions have nothing to match. */
+  const fixtureLibrary = llmMode !== 'ai' && fixtureOnly;
+  const starterLibrary: StarterLibrary =
+    statusState.kind === 'loading' ? 'checking' : fixtureLibrary ? 'fixture' : 'full';
 
   const setup: SetupSummary | null = status
     ? {
@@ -165,7 +183,7 @@ export default function ChatPage() {
         documents: libraryDocs,
         fixtureOnly,
         advocates: totalAdvocates,
-        advocatesAreSamples,
+        sampleAdvocates: advocatesAreSamples ? sampleAdvocates : 0,
       }
     : null;
 
@@ -173,7 +191,9 @@ export default function ChatPage() {
     'Replies are assembled from library passages, not written by an AI model, so you read the source text itself.',
     'The topic, risk and jurisdiction labels come from fixed rules rather than a model. Treat them as a guide.',
     fixtureOnly ? 'The library in this setup holds test fixture passages, not real judgments.' : null,
-    advocatesAreSamples ? 'Advocate listings in this setup are synthetic samples, not real people.' : null,
+    advocatesAreSamples
+      ? `${sampleAdvocates === totalAdvocates ? 'Advocate listings' : 'Most advocate listings'} in this setup are synthetic samples, not real people.`
+      : null,
   ].filter((line): line is string => line !== null);
 
   /* ---- Effects -------------------------------------------------------------- */
@@ -230,6 +250,61 @@ export default function ChatPage() {
   }, [failure]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Keyboard focus must never land behind the sticky box: tell the page how much
+  // room the dock (and the site header) take, so a focused link scrolls clear of both.
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const root = document.documentElement;
+    const apply = () => {
+      root.style.scrollPaddingBottom = `${Math.ceil(dock.getBoundingClientRect().height) + 24}px`;
+    };
+    root.style.scrollPaddingTop = 'calc(var(--header-h) + 0.5rem)';
+    apply();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(apply);
+    observer?.observe(dock);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty('scroll-padding-bottom');
+      root.style.removeProperty('scroll-padding-top');
+    };
+  }, []);
+
+  // A reply restored from history keeps no advocate list. Look the matching
+  // advocates up again, so it reads the same after a reload as when it arrived.
+  useEffect(() => {
+    for (const m of messages) {
+      if (m.role !== 'assistant' || advocateLookupRef.current.has(m.id)) continue;
+      const reply = replies.get(m.id);
+      if (!reply || reply.advocates !== null || !reply.category || !isHighStakes(reply.risk)) continue;
+      advocateLookupRef.current.add(m.id);
+      const category = reply.category;
+      const userState = user?.state_code ?? null;
+      advocateClient
+        .search({ practice_area: category, page_size: 3 })
+        .then((page) =>
+          setAdvocatesByMessage((prev) => ({
+            ...prev,
+            [m.id]: page.items.map((a) => ({
+              id: a.id,
+              display_name: a.display_name,
+              practice_areas: a.practice_areas,
+              state_code: a.state_code,
+              city: a.city,
+              experience_years: a.experience_years,
+              matched_area: category,
+              exact_match: true,
+              same_state: userState !== null && a.state_code === userState,
+              is_sample: a.is_sample,
+            })),
+          })),
+        )
+        .catch(() => {
+          /* the card falls back to a plain "browse the directory" button */
+        });
+    }
+  }, [messages, replies, user?.state_code]);
 
   /* ---- Actions --------------------------------------------------------------- */
 
@@ -487,6 +562,23 @@ export default function ChatPage() {
     />
   );
 
+  const notices = (
+    <>
+      {statusState.kind === 'loading' && <NoticeSkeleton />}
+      {statusState.kind === 'error' && <StatusErrorNotice onRetry={reloadStatus} />}
+      {offline && <ModeNotice details={modeDetails} />}
+      {kbEmpty && (
+        <EmptyLibraryNotice>
+          {offline
+            ? 'Replies cannot include any passages until documents are loaded.'
+            : generalAnswers
+              ? 'Until then, answers are general information from the AI model, not drawn from any legal document.'
+              : 'Until then, the assistant will say it does not have enough verified information.'}
+        </EmptyLibraryNotice>
+      )}
+    </>
+  );
+
   const failureClass =
     failure?.tone === 'danger' ? 'alert-danger' : failure?.tone === 'warn' ? 'alert-warn' : 'alert-info';
 
@@ -504,17 +596,24 @@ export default function ChatPage() {
         <div className={styles.column}>
           <div className={styles.toolbar}>
             <div className={styles.toolbarTitle}>
-              <button
-                type="button"
-                className={`btn btn-secondary btn-sm ${styles.mobileOnly}`}
-                aria-haspopup="dialog"
-                aria-expanded={drawerOpen}
-                onClick={() => setDrawerOpen(true)}
-              >
-                <HistoryIcon />
-                History
-              </button>
-              <h1 className="display text-2xl">Legal chat</h1>
+              {user && (
+                <button
+                  type="button"
+                  className={`btn btn-secondary btn-sm ${styles.mobileOnly}`}
+                  aria-haspopup="dialog"
+                  aria-expanded={drawerOpen}
+                  onClick={() => setDrawerOpen(true)}
+                >
+                  <HistoryIcon />
+                  History
+                </button>
+              )}
+              {/* The empty state carries the page's h1 as its headline. */}
+              {isEmpty ? (
+                <p className={`eyebrow eyebrow-rule ${styles.pageEyebrow}`}>Legal chat</p>
+              ) : (
+                <h1 className={`eyebrow eyebrow-rule ${styles.pageEyebrow}`}>Legal chat</h1>
+              )}
             </div>
             <div className={styles.toolbarActions}>
               <button
@@ -528,18 +627,7 @@ export default function ChatPage() {
             </div>
           </div>
 
-          {statusState.kind === 'loading' && <NoticeSkeleton />}
-          {statusState.kind === 'error' && <StatusErrorNotice onRetry={reloadStatus} />}
-          {offline && <ModeNotice details={modeDetails} />}
-          {kbEmpty && (
-            <EmptyLibraryNotice>
-              {offline
-                ? 'Replies cannot include any passages until documents are loaded.'
-                : generalAnswers
-                  ? 'Until then, answers are general information from the AI model, not drawn from any legal document.'
-                  : 'Until then, the assistant will say it does not have enough verified information.'}
-            </EmptyLibraryNotice>
-          )}
+          {!isEmpty && notices}
         </div>
 
         <div className={`${styles.column} ${styles.content}`}>
@@ -555,7 +643,14 @@ export default function ChatPage() {
               </div>
             </div>
           ) : isEmpty ? (
-            <EmptyState mode={llmMode} disabled={sending} onPick={(q) => void handleSend(q)} />
+            <EmptyState
+              mode={llmMode}
+              library={starterLibrary}
+              libraryDocs={libraryDocs}
+              notices={notices}
+              disabled={sending}
+              onPick={(q) => void handleSend(q)}
+            />
           ) : (
             <div role="log" aria-live="polite" aria-relevant="additions" aria-label="Conversation" aria-busy={sending}>
               <ol className={styles.thread}>
@@ -581,7 +676,10 @@ export default function ChatPage() {
                         <AssistantReply
                           reply={reply}
                           libraryDocs={libraryDocs}
+                          fixtureLibrary={fixtureLibrary}
+                          directoryHasSamples={advocatesAreSamples}
                           onReuse={reuseQuestion}
+                          onAsk={(q) => void handleSend(q)}
                         />
                       )}
                     </li>
@@ -595,6 +693,8 @@ export default function ChatPage() {
                       stage={streaming.stage}
                       expectCards={llmMode === 'offline'}
                       libraryDocs={libraryDocs}
+                      fixtureLibrary={fixtureLibrary}
+                      directoryHasSamples={advocatesAreSamples}
                     />
                   </li>
                 )}
@@ -650,12 +750,10 @@ export default function ChatPage() {
             </div>
           )}
 
-          <p className={styles.disclaimer} style={{ marginTop: 'auto', paddingTop: '1rem' }}>
-            {disclaimer}
-          </p>
+          <p className={styles.disclaimer}>{offline || llmMode === null ? OFFLINE_DISCLAIMER : disclaimer}</p>
         </div>
 
-        <div className={styles.dock}>
+        <div ref={dockRef} className={styles.dock}>
           <div className={styles.column}>
             <Composer
               value={input}

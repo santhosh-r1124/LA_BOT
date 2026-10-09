@@ -55,7 +55,7 @@ function LogOutIcon(props: SVGProps<SVGSVGElement>) {
 
 function Brand() {
   return (
-    <Link href="/" className="brand" aria-label="Legal Advisor, home">
+    <Link href="/" className="brand min-h-10" aria-label="Legal Advisor, home">
       <span className="brand-mark" aria-hidden="true">
         §
       </span>
@@ -115,11 +115,11 @@ export function SiteHeader() {
   const initials = user ? initialsOf(user.display_name, user.email) : '';
 
   const desktopAccount = loading ? (
-    <span className="skeleton h-9 w-24" aria-hidden="true" />
+    <span className="skeleton h-10 w-24" aria-hidden="true" />
   ) : user ? (
     <DropdownMenu
       label={`Account menu for ${name}`}
-      triggerClassName="btn btn-ghost btn-sm gap-2 pl-1.5"
+      triggerClassName="btn btn-ghost gap-2 pl-1.5"
       trigger={
         <>
           <span className="avatar avatar-sm" aria-hidden="true">
@@ -152,10 +152,10 @@ export function SiteHeader() {
     </DropdownMenu>
   ) : (
     <>
-      <Link href="/login" className="btn btn-ghost btn-sm">
+      <Link href="/login" className="btn btn-ghost">
         Log in
       </Link>
-      <Link href="/register" className="btn btn-primary btn-sm">
+      <Link href="/register" className="btn btn-primary">
         Sign up
       </Link>
     </>
@@ -178,7 +178,7 @@ export function SiteHeader() {
             <Link
               key={href}
               href={href}
-              className="nav-link"
+              className="nav-link min-h-10"
               aria-current={isNavActive(pathname, href) ? 'page' : undefined}
             >
               {label}
@@ -187,7 +187,11 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-1.5">
-          <ThemeToggle />
+          {/* One theme control per width: this menu from md up, the Light / Dark /
+              System switch inside the mobile menu below md. */}
+          <div className="hidden md:block">
+            <ThemeToggle />
+          </div>
           <div className="hidden items-center gap-1.5 md:flex">{desktopAccount}</div>
           <button
             ref={toggleRef}

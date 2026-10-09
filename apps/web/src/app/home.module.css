@@ -8,8 +8,8 @@
 
 .proof {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem 1.5rem;
+  flex-direction: column;
+  gap: 0.65rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -47,6 +47,7 @@
 }
 
 .tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
@@ -105,8 +106,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  min-height: 2.5rem;
   margin-top: auto;
-  padding-top: 0.25rem;
   color: var(--color-accent);
   font-size: var(--text-sm);
   font-weight: 650;
@@ -116,6 +117,26 @@
   width: 1.05rem;
   height: 1.05rem;
   transition: transform var(--dur) var(--ease-out-soft);
+}
+
+/* The link covers the whole card, so the card is one click target and the link
+   itself keeps a short name. */
+.cta::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* Show the keyboard focus ring around the whole card instead of the small label. */
+@supports selector(:has(*)) {
+  .cta:focus-visible {
+    outline-color: transparent;
+  }
+  .tile:has(.cta:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
 }
 
 .tile:hover .cta svg {
@@ -131,12 +152,13 @@
   list-style: none;
 }
 
-/* The layout of a reply, drawn with neutral bars (an illustration, not data). */
+/* A sample reply in the offline format. Text, not placeholder bars, so it shows
+   what the product really returns. Everything in it is labelled as a sample. */
 .reply {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  margin-top: auto;
+  margin: auto 0 0;
   padding: 1rem;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-item);
@@ -150,17 +172,60 @@
   gap: 0.5rem;
 }
 
-.lines {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.replyLead {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
 }
 
-.bar {
-  display: block;
-  height: 0.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-line-strong);
+.passage {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-brass);
+  border-radius: var(--radius-control);
+  background: var(--color-elevated);
+}
+
+.passage :global(.cite) {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.passageBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.passageBody p {
+  margin: 0;
+}
+
+.passageTitle {
+  color: var(--color-fg-strong);
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.passageText {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.passageMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.75rem;
+  color: var(--color-fg-subtle);
+  font-size: var(--text-xs);
 }
 
 .replyRule {
@@ -168,34 +233,49 @@
   background: var(--color-line);
 }
 
+.advocateRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.advocateRow p {
+  margin: 0;
+}
+
 .replyCaption {
   margin: 0;
   color: var(--color-fg-subtle);
   font-size: var(--text-xs);
+  line-height: 1.5;
 }
 
-.sourceRow {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.sourceRow .lines {
-  flex: 1;
-}
-
+/* Overlapping people. Opaque (a tint over the card colour) with a ring in the
+   panel colour, so each one stacks cleanly on the next in both themes. */
 .people {
   display: flex;
+  flex: none;
 }
 
 .person {
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-left: -0.4rem;
-  border: 2px solid var(--color-sunken);
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  margin-left: -0.55rem;
+  border: 1px solid var(--color-accent-line);
   border-radius: 50%;
-  background: var(--color-accent-soft);
-  box-shadow: 0 0 0 1px var(--color-accent-line);
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-elevated));
+  color: var(--color-accent-strong);
+  box-shadow: 0 0 0 2px var(--color-sunken);
+}
+
+.person svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .person:first-child {

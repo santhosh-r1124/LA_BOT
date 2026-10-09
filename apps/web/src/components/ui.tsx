@@ -161,7 +161,7 @@ export function ErrorState({
       title={title}
       action={
         onRetry ? (
-          <button type="button" onClick={onRetry} className="btn btn-secondary btn-sm">
+          <button type="button" onClick={onRetry} className="btn btn-secondary">
             {retryLabel}
           </button>
         ) : undefined

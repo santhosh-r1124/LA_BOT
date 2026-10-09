@@ -14,7 +14,8 @@ export interface SetupSummary {
   documents: number | null;
   fixtureOnly: boolean;
   advocates: number | null;
-  advocatesAreSamples: boolean;
+  /** How many of those listings are synthetic samples (0 when none, or not known). */
+  sampleAdvocates: number;
 }
 
 export function HistoryPanel({
@@ -101,7 +102,7 @@ export function HistoryPanel({
       )}
 
       {setup && (
-        <section className={styles.setup} aria-label="About this setup">
+        <section className={styles.setup} aria-label="Chat setup summary">
           <h2 className={styles.setupTitle}>This setup</h2>
           <dl className={styles.setupList}>
             <dt>AI answers</dt>
@@ -117,8 +118,14 @@ export function HistoryPanel({
               <>
                 <dt>Advocates</dt>
                 <dd>
-                  {setup.advocates.toLocaleString('en-IN')}
-                  {setup.advocatesAreSamples ? ' sample listings' : ' listed'}
+                  {setup.advocates.toLocaleString('en-IN')} listed
+                  {setup.sampleAdvocates > 0 && (
+                    <span className={styles.setupSub}>
+                      {setup.sampleAdvocates === setup.advocates
+                        ? 'all are samples'
+                        : `${setup.sampleAdvocates.toLocaleString('en-IN')} are samples`}
+                    </span>
+                  )}
                 </dd>
               </>
             )}

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { AskBox } from '@/components/ask-box';
 import {
+  AdvocateIcon,
   AlertIcon,
   ArrowRightIcon,
   ChatIcon,
@@ -62,7 +63,14 @@ const STEPS: Array<{
   },
 ];
 
+/**
+ * A tool card. The title is a real heading; the call to action is the one link
+ * and is stretched over the whole card (see `.cta::after`), so the link's name is
+ * short ("Ask a question", described by the card title) while the card is still
+ * one large click target.
+ */
 function Tile({
+  id,
   href,
   Icon,
   title,
@@ -70,6 +78,7 @@ function Tile({
   className = '',
   children,
 }: {
+  id: string;
   href: string;
   Icon: IconComponent;
   title: string;
@@ -78,61 +87,86 @@ function Tile({
   children: ReactNode;
 }) {
   return (
-    <Link href={href} className={`card-interactive ${styles.tile} ${className}`.trim()}>
-      <span className={styles.tileHead}>
-        <span className={styles.iconTile}>
+    <article className={`card-interactive ${styles.tile} ${className}`.trim()}>
+      <div className={styles.tileHead}>
+        <span className={styles.iconTile} aria-hidden="true">
           <Icon />
         </span>
-        <span className="title title-lg">{title}</span>
-      </span>
+        <h3 id={`${id}-title`} className="title title-lg">
+          {title}
+        </h3>
+      </div>
       {children}
-      <span className={styles.cta}>
+      <Link href={href} className={styles.cta} aria-describedby={`${id}-title`}>
         {cta}
         <ArrowRightIcon />
-      </span>
-    </Link>
+      </Link>
+    </article>
   );
 }
 
-/** A reply drawn with bars: where the risk level, sources and advocates sit. */
-function ReplyIllustration() {
+/**
+ * What a reply looks like with AI off, using the test library's own passage. It
+ * is labelled as a sample three times (tag, fixture tag, caption) so nobody can
+ * mistake it for a real judgment.
+ */
+function ReplySample() {
   return (
-    <figure className={styles.reply} aria-label="Illustration of how a reply is laid out">
-      <div className={styles.replyRow} aria-hidden="true">
-        <span className="badge badge-warn">
-          <span className="dot" />
-          Risk level
+    <figure className={styles.reply}>
+      <div className={styles.replyRow}>
+        <span className="tag">Sample reply</span>
+        <span className="badge badge-warn badge-sm">
+          <span className="dot" aria-hidden="true" />
+          High risk
         </span>
-        <span className="tag">Legal area</span>
-        <span className="tag">Central or state law</span>
+        <span className="tag">Employment</span>
+        <span className="tag">Central law</span>
       </div>
-      <div className={styles.lines} aria-hidden="true">
-        <span className={styles.bar} style={{ width: '96%' }} />
-        <span className={styles.bar} style={{ width: '88%' }} />
-        <span className="flex items-center gap-2">
-          <span className={styles.bar} style={{ width: '52%' }} />
-          <span className="cite">1</span>
-          <span className={styles.bar} style={{ width: '18%' }} />
+
+      <p className={styles.replyLead}>
+        These are the passages in the legal library that match your question best. The numbers match
+        the sources listed below.
+      </p>
+
+      <div className={styles.passage}>
+        <span className="cite" aria-hidden="true">
+          1
         </span>
+        <div className={styles.passageBody}>
+          <p className={styles.passageTitle}>Ramesh v. Acme Industries</p>
+          <p className={styles.passageText}>
+            The employee had not been paid his salary and wages for several months. The Court held
+            that non-payment of wages is a breach of statutory duty under the Payment of Wages Act,
+            1936.
+          </p>
+          <p className={styles.passageMeta}>
+            <span>High Court of Delhi</span>
+            <span>2019-04-02</span>
+            <span className="mono">FIXTURE/2019/1</span>
+          </p>
+        </div>
       </div>
+
       <div className={styles.replyRule} aria-hidden="true" />
-      <div className={styles.sourceRow} aria-hidden="true">
-        <span className="cite">1</span>
-        <span className={styles.lines}>
-          <span className={styles.bar} style={{ width: '64%' }} />
-          <span className={styles.bar} style={{ width: '40%', opacity: 0.6 }} />
+
+      <div className={styles.advocateRow}>
+        <span className={styles.people} aria-hidden="true">
+          <span className={styles.person}>
+            <AdvocateIcon />
+          </span>
+          <span className={styles.person}>
+            <AdvocateIcon />
+          </span>
+          <span className={styles.person}>
+            <AdvocateIcon />
+          </span>
         </span>
+        <p>Advocates whose practice area fits are listed when the risk is high.</p>
       </div>
-      <div className={styles.sourceRow} aria-hidden="true">
-        <span className={styles.people}>
-          <span className={styles.person} />
-          <span className={styles.person} />
-          <span className={styles.person} />
-        </span>
-        <span className={styles.bar} style={{ width: '42%' }} />
-      </div>
+
       <figcaption className={styles.replyCaption}>
-        Illustration only: a risk level, numbered sources, then advocates to contact.
+        Layout example. The case and citation come from the test library and are fixtures, not real
+        law.
       </figcaption>
     </figure>
   );
@@ -150,7 +184,7 @@ export default function HomePage() {
             <h1 id="hero-title" className="display display-lg">
               Understand Indian law, <em>and know when you need an advocate.</em>
             </h1>
-            <p className="lede">
+            <p className="lede pretty">
               Ask in plain language. You get the matching passages from a legal library, a clear
               risk level, and advocates to contact when a matter is serious.
             </p>
@@ -167,12 +201,12 @@ export default function HomePage() {
             className="rise-in flex flex-col gap-6 lg:col-start-1 lg:row-start-2 lg:self-start"
             style={{ '--i': 1 } as CSSProperties}
           >
-            <div className="cluster">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Link href="/documents" className="btn btn-secondary btn-lg">
                 <DocumentIcon />
                 Draft a document
               </Link>
-              <Link href="/advocates" className="btn btn-ghost btn-lg">
+              <Link href="/advocates" className="btn btn-secondary btn-lg">
                 <UsersIcon />
                 Find an advocate
               </Link>
@@ -199,6 +233,7 @@ export default function HomePage() {
           />
           <div className={styles.bento}>
             <Tile
+              id="tile-chat"
               href="/chat"
               Icon={ChatIcon}
               title="Legal chat"
@@ -222,10 +257,16 @@ export default function HomePage() {
                   </li>
                 ))}
               </ul>
-              <ReplyIllustration />
+              <ReplySample />
             </Tile>
 
-            <Tile href="/documents" Icon={DocumentIcon} title="Document drafts" cta="Start a draft">
+            <Tile
+              id="tile-documents"
+              href="/documents"
+              Icon={DocumentIcon}
+              title="Document drafts"
+              cta="Start a draft"
+            >
               <p className="muted text-sm">
                 Answer a short questionnaire and get a labelled draft with notes on stamping,
                 registration and review. With AI off the draft is a template with blanks to fill in.
@@ -241,6 +282,7 @@ export default function HomePage() {
             </Tile>
 
             <Tile
+              id="tile-advocates"
               href="/advocates"
               Icon={UsersIcon}
               title="Advocate directory"

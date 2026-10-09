@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react';
 import {
   AdvocateIcon,
   AlertIcon,
+  ArrowRightIcon,
   CheckIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
@@ -22,10 +23,15 @@ import {
   describeSource,
   initials,
   isHighStakes,
+  isOfflineWelcome,
   JURISDICTION_LABEL,
+  noMatchLead,
   parseSourcesOnlyText,
+  publicSourceUrl,
   RISK_META,
   stripAdvocateNote,
+  suggestedQuestions,
+  type LibraryKind,
   type RiskLevel,
 } from './chat-helpers';
 import { PassageIcon } from './chat-icons';
@@ -92,52 +98,61 @@ function RiskIcon({ risk }: { risk: RiskLevel }) {
   return <AlertIcon />;
 }
 
-/** Category, risk, jurisdiction and how the reply was made. Every badge carries a word, never only a colour. */
+/**
+ * Category, risk, jurisdiction and how the reply was made. Every badge carries
+ * a word, never only a colour. The topic is a plain outlined chip so a High
+ * risk (brass or red) is the only tinted one, and the reason for the risk is
+ * written out under the row instead of hiding in a tooltip.
+ */
 function ReplyBadges({ reply }: { reply: ReplyData }) {
   const jurisdiction = reply.jurisdiction ? JURISDICTION_LABEL[reply.jurisdiction] : undefined;
   const risk = reply.risk ? RISK_META[reply.risk] : null;
-  const any =
-    reply.category || risk || jurisdiction || reply.outOfScope || reply.mode === 'sources_only' || reply.general;
+  const showPassagesBadge = reply.mode === 'sources_only' && Array.isArray(reply.sources) && reply.sources.length > 0;
+  const any = reply.category || risk || jurisdiction || reply.outOfScope || showPassagesBadge || reply.general;
   if (!any) return null;
   return (
-    <ul className={styles.badges} aria-label="About this reply" style={{ padding: 0, listStyle: 'none' }}>
-      {reply.outOfScope && (
-        <li>
-          <Badge icon={<InfoIcon />}>Outside what I cover</Badge>
-        </li>
-      )}
-      {reply.category && (
-        <li>
-          <Badge tone="accent" icon={<ScaleIcon />}>
-            {categoryLabel(reply.category)}
-          </Badge>
-        </li>
-      )}
-      {reply.risk && risk && (
-        <li>
-          <Badge tone={risk.tone} icon={<RiskIcon risk={reply.risk} />} title={risk.hint}>
-            Risk: {risk.label}
-          </Badge>
-        </li>
-      )}
-      {jurisdiction && (
-        <li>
-          <Badge icon={<MapPinIcon />}>{jurisdiction}</Badge>
-        </li>
-      )}
-      {reply.mode === 'sources_only' && reply.sources !== null && (
-        <li>
-          <Badge icon={<PassageIcon />} title="AI answers are off, so this reply is the matching library text itself.">
-            Library passages only
-          </Badge>
-        </li>
-      )}
-      {reply.general && (
-        <li>
-          <Badge icon={<InfoIcon />}>General information</Badge>
-        </li>
-      )}
-    </ul>
+    <div className={styles.replyMeta}>
+      <ul className={styles.badges} aria-label="About this reply">
+        {reply.outOfScope && (
+          <li>
+            <Badge icon={<InfoIcon />}>Outside what I cover</Badge>
+          </li>
+        )}
+        {reply.category && (
+          <li>
+            <Badge icon={<ScaleIcon className={styles.badgeBrass} />}>{categoryLabel(reply.category)}</Badge>
+          </li>
+        )}
+        {reply.risk && risk && (
+          <li>
+            <Badge tone={risk.tone} icon={<RiskIcon risk={reply.risk} />}>
+              Risk: {risk.label}
+            </Badge>
+          </li>
+        )}
+        {jurisdiction && (
+          <li>
+            <Badge icon={<MapPinIcon />}>{jurisdiction}</Badge>
+          </li>
+        )}
+        {showPassagesBadge && (
+          <li>
+            <Badge
+              icon={<PassageIcon />}
+              title="AI answers are off, so this reply is the matching library text itself."
+            >
+              Library passages only
+            </Badge>
+          </li>
+        )}
+        {reply.general && (
+          <li>
+            <Badge icon={<InfoIcon />}>General information</Badge>
+          </li>
+        )}
+      </ul>
+      {reply.risk && risk && reply.risk !== 'LOW' && <p className={styles.riskNote}>{risk.hint}</p>}
+    </div>
   );
 }
 
@@ -163,6 +178,8 @@ function SourceCard({ id, n, source, heading, excerpt, variant, open, onToggle }
   );
   const passage = excerpt?.trim() || view.excerpt;
   const meta = [view.caseName, ...view.meta].filter(Boolean).join(' · ');
+  // A test fixture or placeholder address has nothing real to open.
+  const link = publicSourceUrl(view);
   return (
     <li id={id} className={cx(styles.source, variant === 'reference' && styles.sourceCompact)}>
       <span className={cx('cite', styles.sourceNum)}>
@@ -202,8 +219,8 @@ function SourceCard({ id, n, source, heading, excerpt, variant, open, onToggle }
           ))}
 
         <div className={styles.sourceFoot}>
-          {view.url && (
-            <a href={view.url} target="_blank" rel="noopener noreferrer" className={cx('link', styles.sourceLink)}>
+          {link && (
+            <a href={link} target="_blank" rel="noopener noreferrer" className={cx('link', styles.sourceLink)}>
               Open source
               <ExternalLinkIcon />
               <span className="sr-only"> (opens in a new tab)</span>
@@ -216,7 +233,7 @@ function SourceCard({ id, n, source, heading, excerpt, variant, open, onToggle }
           )}
           {view.fixture && (
             <p className={styles.fixtureNote}>
-              Fixture passage for local testing. It is not a real court record.
+              Fixture passage for local testing. It is not a real court record, so there is no public source to open.
             </p>
           )}
         </div>
@@ -232,12 +249,19 @@ function SourceCard({ id, n, source, heading, excerpt, variant, open, onToggle }
 function AdvocateCard({
   category,
   advocates,
+  risk,
+  directoryHasSamples,
 }: {
   category: string | null;
   advocates: RecommendedAdvocate[] | null;
+  risk: RiskLevel | null;
+  directoryHasSamples: boolean;
 }) {
   const href = category ? `/advocates?practice_area=${encodeURIComponent(category)}` : '/advocates';
   const shown = (advocates ?? []).slice(0, 3);
+  // The list is not known for a reply restored from history when the lookup failed:
+  // say the same thing about the directory either way.
+  const samples = shown.some((a) => a.is_sample) || (shown.length === 0 && directoryHasSamples);
   return (
     <section aria-label="Advocate recommendation" className={styles.advocates}>
       <div className={styles.advocatesHead}>
@@ -287,10 +311,21 @@ function AdvocateCard({
         <Link href={href} className="btn btn-primary">
           Find an Advocate
         </Link>
-        {shown.some((a) => a.is_sample) && (
+        {samples && (
           <p className={styles.advocatesNote}>Listings in this setup are synthetic samples, not real people.</p>
         )}
       </div>
+
+      {risk === 'CRITICAL' && (
+        <p className={styles.urgent}>
+          <AlertIcon />
+          <span>
+            <strong>If this is urgent</strong>, you do not have to wait for a private advocate. Free legal aid is
+            available through your District Legal Services Authority (NALSA helpline 15100), and 112 is the
+            emergency number.
+          </span>
+        </p>
+      )}
     </section>
   );
 }
@@ -328,19 +363,67 @@ function PendingBody({ label, shape }: { label: string; shape: 'cards' | 'text' 
   );
 }
 
+/** Starter questions that are known to have a matching passage, one tap each. */
+function AskList({
+  questions,
+  onAsk,
+  label,
+}: {
+  questions: string[];
+  onAsk?: (question: string) => void;
+  label: string;
+}) {
+  if (questions.length === 0 || !onAsk) return null;
+  return (
+    <div className={styles.askBlock}>
+      <p className={styles.askLabel}>{label}</p>
+      <ul className={styles.askList}>
+        {questions.map((q) => (
+          <li key={q}>
+            <button type="button" className={styles.askBtn} onClick={() => onAsk(q)}>
+              <span>{q}</span>
+              <ArrowRightIcon />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function NextLinks({ directory = true }: { directory?: boolean }) {
+  return (
+    <div className={styles.actions}>
+      {directory && (
+        <Link href="/advocates" className="btn btn-secondary btn-sm">
+          Browse advocates
+        </Link>
+      )}
+      <Link href="/documents" className="btn btn-secondary btn-sm">
+        Draft a document
+      </Link>
+    </div>
+  );
+}
+
 function NoMatch({
   text,
   libraryDocs,
+  fixtureLibrary,
   showAdvocateLink,
   question,
   onReuse,
+  onAsk,
 }: {
   text: string;
   libraryDocs: number | null;
+  fixtureLibrary: boolean;
   showAdvocateLink: boolean;
   question: string | null;
   onReuse?: (question: string) => void;
+  onAsk?: (question: string) => void;
 }) {
+  const kind: LibraryKind = fixtureLibrary ? 'fixture' : 'full';
   return (
     <div className={styles.noMatch}>
       <div className={styles.noMatchHead}>
@@ -349,12 +432,31 @@ function NoMatch({
         </span>
         <h2 className={styles.noMatchTitle}>Nothing in the library matched</h2>
       </div>
-      <p className={styles.noMatchText}>{text}</p>
-      {libraryDocs !== null && (
-        <p className={styles.noMatchLibrary}>
-          The library currently holds {libraryDocs} document{libraryDocs === 1 ? '' : 's'}, so a narrow topic may
-          simply not be covered yet.
-        </p>
+      <p className={styles.noMatchText}>{noMatchLead(text)}</p>
+      {fixtureLibrary ? (
+        <>
+          <p className={styles.noMatchLibrary}>
+            This setup&apos;s library holds only {libraryDocs ?? 'a few'} test passages (marked Fixture), so most
+            topics will not match.
+          </p>
+          <AskList
+            questions={suggestedQuestions(kind, 4)}
+            onAsk={onAsk}
+            label="These questions do have a matching passage"
+          />
+        </>
+      ) : (
+        <>
+          <p className={styles.noMatchText}>
+            Try rewording it around the specific topic, law or document involved.
+          </p>
+          {libraryDocs !== null && (
+            <p className={styles.noMatchLibrary}>
+              The library currently holds {libraryDocs} document{libraryDocs === 1 ? '' : 's'}, so a narrow topic
+              may simply not be covered yet.
+            </p>
+          )}
+        </>
       )}
       <div className={styles.actions}>
         {question && onReuse && (
@@ -368,10 +470,42 @@ function NoMatch({
             Browse advocates
           </Link>
         )}
-        <Link href="/documents" className="btn btn-ghost btn-sm">
+        <Link href="/documents" className="btn btn-secondary btn-sm">
           Draft a document
         </Link>
       </div>
+    </div>
+  );
+}
+
+/** The greeting in offline mode: says what works here, and offers a way forward instead of a dead end. */
+function OfflineWelcome({
+  fixtureLibrary,
+  onAsk,
+}: {
+  fixtureLibrary: boolean;
+  onAsk?: (question: string) => void;
+}) {
+  return (
+    <div className={styles.stack}>
+      <p className={styles.lead}>
+        Hello. I&apos;m the Legal Advisor for Indian law. AI answers are off in this setup, so I reply by finding the
+        passages in the legal library that match your question and showing them with their sources.
+      </p>
+      <p className={styles.leadMuted}>
+        {fixtureLibrary
+          ? 'The library here holds a few test passages, so ask about one of these situations:'
+          : 'Describe a specific situation, or start from one of these:'}
+      </p>
+      <AskList
+        questions={suggestedQuestions(fixtureLibrary ? 'fixture' : 'full', 4)}
+        onAsk={onAsk}
+        label="Try a question"
+      />
+      <p className={styles.leadMuted}>
+        The advocate directory is open, and the document assistant prepares template drafts you can edit.
+      </p>
+      <NextLinks />
     </div>
   );
 }
@@ -380,21 +514,29 @@ function SourcesOnlyBody({
   reply,
   pending,
   libraryDocs,
+  fixtureLibrary,
   hideAdvocateNote,
   onReuse,
+  onAsk,
 }: {
   reply: ReplyData;
   pending: boolean;
   libraryDocs: number | null;
+  fixtureLibrary: boolean;
   hideAdvocateNote: boolean;
   onReuse?: (question: string) => void;
+  onAsk?: (question: string) => void;
 }) {
   const parts = parseSourcesOnlyText(reply.text);
   const sources = reply.sources ?? [];
 
-  // Greeting, welcome and out-of-scope replies have no sources: plain text.
+  // Greeting, welcome and out-of-scope replies have no sources. The welcome is
+  // laid out here once it is complete; anything else is plain text.
   if (reply.sources === null) {
-    return <LegalText text={reply.text} caret={pending} />;
+    if (!pending && isOfflineWelcome(reply.text)) {
+      return <OfflineWelcome fixtureLibrary={fixtureLibrary} onAsk={onAsk} />;
+    }
+    return <LegalText text={reply.text} caret={pending} className={styles.replyText} />;
   }
 
   const noMatch =
@@ -404,9 +546,11 @@ function SourcesOnlyBody({
       <NoMatch
         text={stripAdvocateNote(reply.text)}
         libraryDocs={libraryDocs}
+        fixtureLibrary={fixtureLibrary}
         showAdvocateLink={!isHighStakes(reply.risk)}
         question={reply.question}
         onReuse={onReuse}
+        onAsk={onAsk}
       />
     );
   }
@@ -458,7 +602,10 @@ export function AssistantReply({
   stage = 'done',
   expectCards = false,
   libraryDocs = null,
+  fixtureLibrary = false,
+  directoryHasSamples = false,
   onReuse,
+  onAsk,
 }: {
   reply: ReplyData;
   pending?: boolean;
@@ -467,7 +614,14 @@ export function AssistantReply({
   /** Offline setup: show the passage-card skeleton while waiting. */
   expectCards?: boolean;
   libraryDocs?: number | null;
+  /** The library holds only the bundled test passages. */
+  fixtureLibrary?: boolean;
+  /** The advocate directory in this setup includes synthetic sample listings. */
+  directoryHasSamples?: boolean;
+  /** Put a question back in the box to edit it. */
   onReuse?: (question: string) => void;
+  /** Ask a question straight away (suggestions under replies that lead nowhere). */
+  onAsk?: (question: string) => void;
 }) {
   const [openSources, setOpenSources] = useState<ReadonlySet<number>>(new Set());
   const sources = reply.sources;
@@ -511,8 +665,10 @@ export function AssistantReply({
         reply={reply}
         pending={pending}
         libraryDocs={libraryDocs}
+        fixtureLibrary={fixtureLibrary}
         hideAdvocateNote={showAdvocates}
         onReuse={onReuse}
+        onAsk={onAsk}
       />
     );
   } else {
@@ -571,7 +727,24 @@ export function AssistantReply({
       </div>
       <ReplyBadges reply={bare ? { ...reply, category: null, jurisdiction: null, risk: null } : reply} />
       {body}
-      {showAdvocates && <AdvocateCard category={reply.category} advocates={reply.advocates} />}
+      {reply.outOfScope && !pending && (
+        <div className={cx(styles.stack, styles.stackAfter)}>
+          <AskList
+            questions={suggestedQuestions(fixtureLibrary ? 'fixture' : 'full', 3)}
+            onAsk={onAsk}
+            label="Questions to start from"
+          />
+          <NextLinks />
+        </div>
+      )}
+      {showAdvocates && (
+        <AdvocateCard
+          category={reply.category}
+          advocates={reply.advocates}
+          risk={reply.risk}
+          directoryHasSamples={directoryHasSamples}
+        />
+      )}
     </article>
   );
 }

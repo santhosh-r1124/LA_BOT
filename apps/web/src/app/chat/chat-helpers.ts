@@ -96,6 +96,30 @@ export function stripAdvocateNote(text: string): string {
   return text;
 }
 
+/** True for the fixed greeting the API gives when AI answers are off. */
+export function isOfflineWelcome(text: string): boolean {
+  return text.trimStart().startsWith(OFFLINE_WELCOME_START);
+}
+
+const NO_MATCH_LEAD = 'AI answers are off in this setup, so there is no written answer to give instead.';
+
+/**
+ * The first line of the "nothing matched" card. The API's own text repeats the
+ * card title, then suggests example topics that may not exist in this library
+ * and (for urgent questions) calls the directory "verified". The card shows its
+ * own suggestions and the advocate card says what the directory really is, so
+ * only the plain statement is kept: the API sentence is replaced by a fixed
+ * one, and an unfamiliar text keeps its sentences minus those two kinds.
+ */
+export function noMatchLead(text: string): string {
+  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (trimmed.startsWith(NO_MATCH_START)) return NO_MATCH_LEAD;
+  const kept = trimmed
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !/^try rewording/i.test(sentence) && !/advocate directory lists|verified advocates/i.test(sentence));
+  return kept.join(' ') || NO_MATCH_LEAD;
+}
+
 export interface SourcesOnlyEntry {
   /** The `[n]` marker, 1-based, matching the position in `sources`. */
   n: number;
@@ -260,6 +284,33 @@ export function describeSource(source: SourceOut): SourceView {
     excerpt: source.excerpt?.trim() || null,
     url: safeHttpUrl(source.source_url),
   };
+}
+
+/**
+ * Hosts that exist only as placeholders (RFC 2606 / 6761 reserved names). A
+ * dataset that points its passages at one of these has no real page to open.
+ */
+const PLACEHOLDER_HOST = /(^|\.)(example(\.(com|org|net))?|test|invalid|localhost)$/i;
+
+export function isPlaceholderUrl(url: string | null | undefined): boolean {
+  const safe = safeHttpUrl(url);
+  if (!safe) return false;
+  try {
+    return PLACEHOLDER_HOST.test(new URL(safe).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The link worth showing as "Open source": the passage's own http(s) URL, but
+ * never for a test fixture or a placeholder address, which would send a reader
+ * to a generic page while the card is labelled as a source.
+ */
+export function publicSourceUrl(view: Pick<SourceView, 'url' | 'fixture' | 'dataset'>): string | null {
+  if (!view.url) return null;
+  if (view.fixture || (view.dataset !== null && /fixture/i.test(view.dataset))) return null;
+  return isPlaceholderUrl(view.url) ? null : view.url;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -452,7 +503,7 @@ export function initials(name: string | null | undefined): string {
 /* Starter questions                                                          */
 /* -------------------------------------------------------------------------- */
 
-export type StarterIcon = 'briefcase' | 'home' | 'shield' | 'document';
+export type StarterIcon = 'briefcase' | 'home' | 'shield' | 'lock' | 'document';
 
 export interface StarterGroup {
   id: string;
@@ -460,6 +511,22 @@ export interface StarterGroup {
   icon: StarterIcon;
   questions: string[];
 }
+
+/** Whether the library holds only the few test passages bundled with this setup, or a real corpus. */
+export type LibraryKind = 'fixture' | 'full';
+
+/**
+ * Questions the four bundled test passages can answer (checked against the
+ * keyword search the offline mode uses). In a setup that has only those
+ * passages, every other starter would end at "nothing matched", so the empty
+ * state offers just these.
+ */
+export const FIXTURE_ANSWERABLE: readonly string[] = [
+  'What are my legal options if my employer has not paid my salary for several months?',
+  'My landlord is not returning my security deposit',
+  'A shop sold me a defective product and refuses a refund. What can I do?',
+  'A company shared my personal data with a third party without my consent',
+];
 
 export const STARTER_GROUPS: StarterGroup[] = [
   {
@@ -490,6 +557,15 @@ export const STARTER_GROUPS: StarterGroup[] = [
     ],
   },
   {
+    id: 'privacy',
+    title: 'Data and privacy',
+    icon: 'lock',
+    questions: [
+      'A company shared my personal data with a third party without my consent',
+      'What rights do I have over my personal data held by a company?',
+    ],
+  },
+  {
     id: 'documents',
     title: 'Documents and contracts',
     icon: 'document',
@@ -500,3 +576,19 @@ export const STARTER_GROUPS: StarterGroup[] = [
     ],
   },
 ];
+
+/** The starter groups to show: all of them, or only what a test-fixture library can answer. */
+export function startersFor(kind: LibraryKind): StarterGroup[] {
+  if (kind === 'full') return STARTER_GROUPS;
+  const answerable = new Set(FIXTURE_ANSWERABLE);
+  return STARTER_GROUPS.map((group) => ({
+    ...group,
+    questions: group.questions.filter((q) => answerable.has(q)),
+  })).filter((group) => group.questions.length > 0);
+}
+
+/** A few starters to offer under replies that dead-end (greeting, out of scope, nothing matched). */
+export function suggestedQuestions(kind: LibraryKind, count = 3): string[] {
+  if (kind === 'fixture') return FIXTURE_ANSWERABLE.slice(0, count);
+  return STARTER_GROUPS.map((group) => group.questions[0]).filter((q): q is string => Boolean(q)).slice(0, count);
+}

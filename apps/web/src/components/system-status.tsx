@@ -13,6 +13,7 @@ import { ApiRequestError } from '@/lib/api-client';
 import { providerLabel, statusClient, usePlatformStatus } from '@/lib/status-client';
 import {
   aiMode,
+  formatChecks,
   summariseAi,
   summariseDirectory,
   summariseLibrary,
@@ -24,7 +25,66 @@ import {
 type AiCheck =
   { kind: 'idle' } | { kind: 'running' } | { kind: 'done'; ok: boolean; message: string };
 
-function Cell({ cell, children }: { cell: StatusCell; children?: React.ReactNode }) {
+/**
+ * `status-summary` keeps the exact, technical wording (and has tests for it). This
+ * panel is read by people who have never heard of Redis or "fixtures", so the
+ * words are swapped for plain ones here; the technical detail stays one click away.
+ */
+const PLAIN_WORDING: Array<[RegExp, string]> = [
+  [
+    /Test fixtures for local use, not real case law\./,
+    'Sample passages for trying the product, not real case law.',
+  ],
+  [/Keyword and meaning-based search\./, 'Finds passages by your words and by meaning.'],
+  [/Keyword search only\./, 'Finds passages by matching your words.'],
+  [/The web server could not reach the API\./, 'This page could not reach the server.'],
+];
+
+function plainNote(note: string): string {
+  return PLAIN_WORDING.reduce((text, [pattern, plain]) => text.replace(pattern, plain), note);
+}
+
+function plainAi(cell: StatusCell, offline: boolean): StatusCell {
+  if (!offline) return cell;
+  return {
+    ...cell,
+    badge: 'Switched off',
+    note: 'AI answers are switched off on this computer. Replies show the passages that match your question and a risk level worked out by fixed rules, with no written explanation.',
+  };
+}
+
+function plainServices(infra: InfraHealth): { cell: StatusCell; details: string } {
+  const cell = summariseServices(infra);
+  const details = formatChecks(infra.checks);
+  const hasChecks = Object.keys(infra.checks ?? {}).length > 0;
+  const unit = hasChecks ? 'parts running' : cell.unit;
+
+  if (infra.status === 'ok') {
+    return { cell: { ...cell, unit, note: 'Everything needed is running.' }, details };
+  }
+  if (infra.status === 'degraded') {
+    return {
+      cell: {
+        ...cell,
+        unit,
+        note: 'Part of the system is not responding, so some features may fail.',
+      },
+      details,
+    };
+  }
+  return { cell: { ...cell, note: plainNote(cell.note) }, details: '' };
+}
+
+function Cell({
+  cell,
+  details,
+  children,
+}: {
+  cell: StatusCell;
+  /** Technical detail for people who want it, collapsed by default. */
+  details?: string;
+  children?: React.ReactNode;
+}) {
   return (
     <li className="bg-elevated flex min-w-0 flex-col items-start gap-3 p-5">
       <h3 className="caps subtle">{cell.label}</h3>
@@ -33,7 +93,13 @@ function Cell({ cell, children }: { cell: StatusCell; children?: React.ReactNode
         {cell.unit && <span className="muted text-sm">{cell.unit}</span>}
       </p>
       <StatusBadge tone={cell.tone}>{cell.badge}</StatusBadge>
-      <p className="muted text-sm leading-relaxed">{cell.note}</p>
+      <p className="muted text-sm leading-relaxed">{plainNote(cell.note)}</p>
+      {details && (
+        <details className="disclosure subtle w-full text-xs">
+          <summary className="min-h-10 w-fit">Technical details</summary>
+          <p className="mono mt-1 break-words">{details}</p>
+        </details>
+      )}
       {children}
     </li>
   );
@@ -105,6 +171,7 @@ export function SystemStatus() {
 
   const status = state.kind === 'ready' ? state.status : null;
   const aiConfigured = status ? aiMode(status) === 'ai' : false;
+  const services = plainServices(infra);
 
   return (
     <section aria-labelledby={headingId} className="section">
@@ -118,7 +185,7 @@ export function SystemStatus() {
             <span className="subtle text-xs" aria-live="polite">
               {checkedAt ? `Checked ${formatRelativeTime(checkedAt)}` : 'Checking…'}
             </span>
-            <button type="button" onClick={refresh} className="btn btn-secondary btn-sm">
+            <button type="button" onClick={refresh} className="btn btn-secondary">
               <RefreshIcon />
               Refresh
             </button>
@@ -134,7 +201,7 @@ export function SystemStatus() {
             onRetry={refresh}
           />
           <ul className="border-line bg-line rounded-item grid gap-px overflow-hidden border">
-            <Cell cell={summariseServices(infra)} />
+            <Cell cell={services.cell} details={services.details} />
           </ul>
         </div>
       ) : (
@@ -146,14 +213,14 @@ export function SystemStatus() {
             {status ? (
               <>
                 <Cell cell={summariseLibrary(status.knowledge_base)} />
-                <Cell cell={summariseAi(status.llm)}>
+                <Cell cell={plainAi(summariseAi(status.llm), !aiConfigured)}>
                   {aiConfigured && (
                     <div className="flex flex-col items-start gap-2">
                       <button
                         type="button"
                         onClick={testAi}
                         aria-busy={aiCheck.kind === 'running' ? true : undefined}
-                        className="btn btn-secondary btn-sm"
+                        className="btn btn-secondary"
                       >
                         {aiCheck.kind === 'running' ? 'Testing' : 'Test AI connection'}
                       </button>
@@ -177,7 +244,7 @@ export function SystemStatus() {
                 <CellSkeleton />
               </>
             )}
-            <Cell cell={summariseServices(infra)} />
+            <Cell cell={services.cell} details={services.details} />
           </ul>
         </>
       )}
