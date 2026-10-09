@@ -42,7 +42,8 @@ interface AuthContextValue {
   registerAdvocate: (payload: AdvocateRegisterPayload) => Promise<void>;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile: (payload: AdvocateProfileUpdatePayload) => Promise<void>;
+  /** Saves the changes and resolves with the profile as the server now holds it. */
+  updateProfile: (payload: AdvocateProfileUpdatePayload) => Promise<AdvocateProfile>;
   refresh: () => Promise<void>;
 }
 
@@ -162,7 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new ApiRequestError(
             403,
             'not_an_advocate',
-            "This email isn't registered as an advocate. Register as an advocate first.",
+            'No advocate profile is linked to this email address.',
           );
         }
         throw err;
@@ -209,7 +210,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       if (err instanceof ApiRequestError && !err.isNetworkError) {
         clearSession();
-        throw new ApiRequestError(401, 'session_expired', 'Your session has expired. Log in again.');
+        throw new ApiRequestError(
+          401,
+          'session_expired',
+          'Your session has expired. Log in again.',
+        );
       }
       throw err;
     }
@@ -218,7 +223,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updateProfile = useCallback(
     async (payload: AdvocateProfileUpdatePayload) => {
       const token = await getValidAccessToken();
-      setProfile(await authClient.updateAdvocateProfile(token, payload));
+      const next = await authClient.updateAdvocateProfile(token, payload);
+      setProfile(next);
+      return next;
     },
     [getValidAccessToken],
   );

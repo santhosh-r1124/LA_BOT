@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   DropdownMenu,
   MenuButton,
@@ -12,6 +12,7 @@ import {
 } from '@/components/dropdown-menu';
 import {
   AdvocateIcon,
+  AlertIcon,
   ChevronDownIcon,
   CloseIcon,
   ExternalLinkIcon,
@@ -22,12 +23,11 @@ import {
 } from '@/components/icons';
 import { LogOutIcon } from '@/components/portal-icons';
 import { ThemeSwitch, ThemeToggle } from '@/components/theme-toggle';
-import { env } from '@/lib/env';
+import { DIRECTORY_URL } from '@/lib/links';
 import { initialsOf } from '@/lib/options';
 import { useAuth } from '@/lib/auth-context';
-import { statusInfo } from '@/lib/verification';
-
-const DIRECTORY_URL = `${env.NEXT_PUBLIC_WEB_BASE_URL.replace(/\/$/, '')}/advocates`;
+import { StatusBadge } from '@/components/status';
+import styles from './site-header.module.css';
 
 interface NavItem {
   href: string;
@@ -58,7 +58,7 @@ function Brand() {
 }
 
 /** Opens the public directory in a new tab. */
-function DirectoryLink({ className, children }: { className: string; children: React.ReactNode }) {
+function DirectoryLink({ className, children }: { className: string; children: ReactNode }) {
   return (
     <a href={DIRECTORY_URL} target="_blank" rel="noopener noreferrer" className={className}>
       {children}
@@ -68,8 +68,18 @@ function DirectoryLink({ className, children }: { className: string; children: R
   );
 }
 
+/** Stands in for the login buttons while a saved session cannot be checked. */
+function UnreachableBadge() {
+  return (
+    <span className="badge badge-warn">
+      <AlertIcon />
+      Server unreachable
+    </span>
+  );
+}
+
 export function SiteHeader() {
-  const { user, profile, loading, logout } = useAuth();
+  const { user, profile, loading, logout, sessionIssue } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -118,19 +128,20 @@ export function SiteHeader() {
   const name = user ? user.display_name || user.email : '';
   const initials = user ? initialsOf(user.display_name, user.email) : '';
   const nav = NAV.filter((item) => !item.auth || user);
-  const status = profile ? statusInfo(profile.verification_status) : null;
 
   const desktopAccount = loading ? (
     <span className="skeleton h-9 w-24" aria-hidden="true" />
   ) : user ? (
     <DropdownMenu
       label={`Account menu for ${name}`}
-      triggerClassName="btn btn-ghost btn-sm gap-2 pl-1.5"
+      triggerClassName="btn btn-ghost gap-2 pl-1.5"
       trigger={
         <>
-          <span className="avatar avatar-sm" aria-hidden="true">
-            {initials}
-          </span>
+          <span
+            className={`avatar avatar-sm ${styles.initials}`}
+            data-initials={initials}
+            aria-hidden="true"
+          />
           <span className="hidden max-w-[10rem] truncate lg:inline">{name}</span>
           <ChevronDownIcon className="size-4 opacity-70" />
         </>
@@ -144,12 +155,9 @@ export function SiteHeader() {
       >
         {user.email}
       </p>
-      {status && (
+      {profile && (
         <p role="presentation" className="px-[0.65rem] pb-1">
-          <span className={`badge badge-sm ${badgeTone(status.tone)}`}>
-            <span className="dot" aria-hidden="true" />
-            {status.label}
-          </span>
+          <StatusBadge status={profile.verification_status} small />
         </p>
       )}
       <MenuSeparator />
@@ -178,12 +186,14 @@ export function SiteHeader() {
         Log out
       </MenuButton>
     </DropdownMenu>
+  ) : sessionIssue ? (
+    <UnreachableBadge />
   ) : (
     <>
-      <Link href="/login" className="btn btn-ghost btn-sm">
+      <Link href="/login" className="btn btn-ghost">
         Log in
       </Link>
-      <Link href="/register" className="btn btn-primary btn-sm">
+      <Link href="/register" className="btn btn-primary">
         Register
       </Link>
     </>
@@ -275,10 +285,9 @@ export function SiteHeader() {
                   <span className="min-w-0">
                     <span className="subtle block text-xs">Signed in as</span>
                     <span className="block truncate text-sm font-semibold">{name}</span>
-                    {status && (
-                      <span className={`badge badge-sm mt-1 ${badgeTone(status.tone)}`}>
-                        <span className="dot" aria-hidden="true" />
-                        {status.label}
+                    {profile && (
+                      <span className="mt-1 block">
+                        <StatusBadge status={profile.verification_status} small />
                       </span>
                     )}
                   </span>
@@ -292,6 +301,8 @@ export function SiteHeader() {
                   </button>
                 </div>
               </div>
+            ) : sessionIssue ? (
+              <UnreachableBadge />
             ) : (
               <div className="grid grid-cols-2 gap-2">
                 <Link href="/login" className="btn btn-secondary">
@@ -309,20 +320,4 @@ export function SiteHeader() {
       )}
     </header>
   );
-}
-
-/** The badge class for a status tone (shared with the status panel). */
-function badgeTone(tone: string): string {
-  switch (tone) {
-    case 'ok':
-      return 'badge-ok';
-    case 'warn':
-      return 'badge-warn';
-    case 'danger':
-      return 'badge-danger';
-    case 'accent':
-      return 'badge-accent';
-    default:
-      return '';
-  }
 }

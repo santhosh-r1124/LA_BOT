@@ -73,7 +73,11 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
         payload.error.details,
       );
     }
-    throw new ApiRequestError(response.status, 'http_error', `Request failed (${response.status}).`);
+    throw new ApiRequestError(
+      response.status,
+      'http_error',
+      `Request failed (${response.status}).`,
+    );
   }
 
   return payload as T;

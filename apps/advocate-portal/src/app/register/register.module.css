@@ -1,0 +1,305 @@
+/*
+ * Register page: a long form split into five numbered sections. From 960px a
+ * sticky panel on the left lists the sections and what happens after sign-up;
+ * below that it is one column. Tokens only; nothing is wider than its container.
+ */
+
+.shell {
+  display: grid;
+  gap: 1.75rem;
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding: clamp(1.5rem, 4vw, 3rem) var(--gutter) clamp(2.5rem, 6vw, 4.5rem);
+}
+
+@media (min-width: 640px) {
+  .shell {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (min-width: 960px) {
+  .shell {
+    grid-template-columns: minmax(0, 19rem) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(2.5rem, 5vw, 5rem);
+    padding-block: 4rem 5rem;
+  }
+}
+
+/* ---- Intro panel --------------------------------------------------------------- */
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (min-width: 960px) {
+  .intro {
+    position: sticky;
+    top: calc(var(--header-h) + 2rem);
+    gap: 1.75rem;
+  }
+}
+
+.introHead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.9rem, 1.5rem + 1.6vw, 2.6rem);
+  line-height: 1.1;
+  outline: none;
+}
+
+.lede {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* Section navigator: wide screens only, since the form is short enough to scroll on phones. */
+.toc {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .toc {
+    display: block;
+  }
+}
+
+.tocList {
+  display: flex;
+  flex-direction: column;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-left: 1px solid var(--color-line-strong);
+}
+
+.tocLink {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 2.5rem;
+  margin-left: -1px;
+  padding: 0.35rem 0.75rem;
+  border-left: 2px solid transparent;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.tocLink:hover {
+  border-left-color: var(--color-accent-line);
+  color: var(--color-fg-strong);
+}
+
+.tocNum {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 50%;
+  color: var(--color-fg-subtle);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tocLink[data-done='true'] .tocNum {
+  border-color: var(--color-ok-line);
+  background: var(--color-ok-bg);
+  color: var(--color-ok);
+}
+
+.tocLink[data-done='true'] .tocNum > svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.tocState {
+  margin-left: auto;
+  color: var(--color-fg-subtle);
+  font-size: 0.75rem;
+}
+
+.afterList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.75rem 0 0;
+  padding-left: 1.2rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.afterList li::marker {
+  color: var(--color-fg-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.disclosureBox {
+  padding: 0.85rem 1rem;
+}
+
+.disclosureBox > summary {
+  min-height: 2rem;
+  color: var(--color-fg-strong);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* ---- Form card ----------------------------------------------------------------- */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.5rem 1.25rem;
+  scroll-margin-top: calc(var(--header-h) + 1rem);
+}
+
+.section + .section {
+  border-top: 1px solid var(--color-line);
+}
+
+@media (min-width: 640px) {
+  .section {
+    padding: 1.9rem 2rem;
+  }
+}
+
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.sectionNum {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--color-accent-line);
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: lining-nums;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--color-fg-strong);
+}
+
+.sectionLede {
+  margin: 0.15rem 0 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.twoCol {
+  display: grid;
+  gap: 1.1rem;
+}
+
+@media (min-width: 560px) {
+  .twoCol {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.prefixWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.prefix {
+  position: absolute;
+  left: 0.8rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+.prefixInput {
+  padding-left: 1.9rem;
+}
+
+.count {
+  color: var(--color-fg-subtle);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.countOver {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+/* ---- Submit area ----------------------------------------------------------------- */
+
+.submitArea {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem 1.25rem 1.75rem;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-tint);
+  border-radius: 0 0 var(--radius-panel) var(--radius-panel);
+}
+
+@media (min-width: 640px) {
+  .submitArea {
+    padding: 1.75rem 2rem 2rem;
+  }
+}
+
+.problems {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.problems a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.fineprint {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+.alreadyRegistered {
+  margin: 0;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}

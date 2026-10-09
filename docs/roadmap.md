@@ -1,27 +1,34 @@
 # Product Roadmap
 
-16 phases from architecture to production launch. Each phase has a concrete
-deliverable and builds on the previous one.
+16 phases from architecture to launch. Each phase has a concrete deliverable and builds on the
+previous one. LA_BOT is a **local-only** product (it runs on your own computer, with no AI key
+required), so the hosting parts of Phases 15 and 16 are not planned. Per-feature status, based on the
+code: [`project-status.md`](project-status.md).
 
-| Phase | Name                          | Deliverable                                                        | Status |
-| ----- | ----------------------------- | ---------------------------------------------------------------- | ------ |
-| 0     | Architecture                  | Running production-style skeleton: frontend + backend + database | ✅ Done |
-| 1     | Authentication                | Full auth + RBAC (CONSUMER, ADVOCATE, ADMIN, LEGAL_ADMIN, ENTERPRISE_USER) | ✅ Done |
-| 2     | Public AI Chat                | Working public Indian legal-information chatbot                   | ✅ Done (no retrieval grounding yet — see below) |
-| 3     | Indian Legal Knowledge Base   | Searchable, source-grounded legal repository (ingestion pipeline) | ✅ Done (pipeline + storage; bulk corpus population is follow-up) |
-| 4     | RAG Engine                    | Production Indian legal RAG (hybrid search + rerank + guardrails) | ✅ Done (wired into chat; most answers are "insufficient evidence" until a corpus is loaded) |
-| 5     | Classification & Guardrails   | Legal category classifier + LOW/MEDIUM/HIGH/CRITICAL risk engine  | ✅ Done |
-| 6     | Document Assistant            | Consumer legal-document questionnaire + draft/template generation | ✅ Done |
-| 7     | Advocate Marketplace          | Advocate discovery with filters + profiles                       | ✅ Done |
-| 8     | On-Demand Consultation        | End-to-end booking → payment → consultation → matter closed      | ⬜ Not started |
-| 9     | Advocate Portal               | Advocate operating dashboard (requests, matters, docs, earnings)  | ⬜ Not started |
-| 10    | Payments                      | Consultation + document-service payments, refunds, invoices       | ⬜ Not started |
-| 11    | Notifications                 | Email / SMS / OTP / in-app across all lifecycle events            | ⬜ Not started |
-| 12    | Admin & Legal Ops Dashboard   | User/advocate/RAG-source management, high-risk query review       | ⬜ Not started |
-| 13    | Security & Compliance         | Hardening: rate limiting, prompt-injection defence, audit logs, tenant isolation | ⬜ Not started |
-| 14    | Testing                       | Unit + integration + browser E2E coverage                        | 🟡 Scaffolding only |
-| 15    | Production Deployment          | Cloud hosting, managed Postgres/Redis, monitoring, CI/CD, backups | 🟡 Scaffolding only |
-| 16    | Launch                        | MVP: Chat + Document Assistant + Advocate Search + Booking        | ⬜ Not started |
+| Phase | Name                        | Deliverable                                                                      | Status                                                                                                                                         |
+| ----- | --------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Architecture                | Running production-style skeleton: frontend + backend + database                 | ✅ Done                                                                                                                                        |
+| 1     | Authentication              | Full auth + RBAC (CONSUMER, ADVOCATE, ADMIN, LEGAL_ADMIN, ENTERPRISE_USER)       | ✅ Done                                                                                                                                        |
+| 2     | Public AI Chat              | Working public Indian legal-information chatbot                                  | ✅ Done (grounded from Phase 4; also runs with no AI key, see Offline mode below)                                                              |
+| 3     | Indian Legal Knowledge Base | Searchable, source-grounded legal repository (ingestion pipeline)                | ✅ Done (pipeline and storage; Hugging Face judgments load on start when reachable; the 15 official Acts via `pnpm kb:seed` with a Gemini key) |
+| 4     | RAG Engine                  | Production Indian legal RAG (hybrid search + rerank + guardrails)                | ✅ Done (wired into chat; keyword-only without embeddings; replies say so when nothing in the library matches)                                 |
+| 5     | Classification & Guardrails | Legal category classifier + LOW/MEDIUM/HIGH/CRITICAL risk engine                 | ✅ Done                                                                                                                                        |
+| 6     | Document Assistant          | Consumer legal-document questionnaire + draft/template generation                | ✅ Done (AI drafts with a key; deterministic template drafts without)                                                                          |
+| 7     | Advocate Marketplace        | Advocate discovery with filters + profiles                                       | ✅ Done                                                                                                                                        |
+| 8     | On-Demand Consultation      | End-to-end booking → payment → consultation → matter closed                      | ⬜ Not started                                                                                                                                 |
+| 9     | Advocate Portal             | Advocate operating dashboard (requests, matters, docs, earnings)                 | ⬜ Not started                                                                                                                                 |
+| 10    | Payments                    | Consultation + document-service payments, refunds, invoices                      | ⬜ Not started                                                                                                                                 |
+| 11    | Notifications               | Email / SMS / OTP / in-app across all lifecycle events                           | ⬜ Not started                                                                                                                                 |
+| 12    | Admin & Legal Ops Dashboard | User/advocate/RAG-source management, high-risk query review                      | ⬜ Not started (admin APIs and an advocate CSV import page exist; no dashboard)                                                                |
+| 13    | Security & Compliance       | Hardening: rate limiting, prompt-injection defence, audit logs, tenant isolation | 🟡 Partly: AI rate limiting and a basic prompt-injection boundary exist; audit logs and tenant isolation do not                                |
+| 14    | Testing                     | Unit + integration + browser E2E coverage                                        | 🟡 Partly: backend unit/integration suite (637 tests), frontend unit tests and an API smoke-check script; no browser E2E suite in the repo     |
+| 15    | Production Deployment       | Cloud hosting, managed Postgres/Redis, monitoring, CI/CD, backups                | ⬜ Not planned: the product is local-only. CI and Docker Compose for local runs exist                                                          |
+| 16    | Launch                      | MVP: Chat + Document Assistant + Advocate Search + Booking                       | 🟡 Chat, Document Assistant and Advocate Search work locally; Booking is not built                                                             |
+
+> The "what shipped" sections below record each phase as it landed, so they name the model, keys and
+> behaviour of that time (Claude-only calls, `503 llm_not_configured`, an empty library). Later work
+> changed some of it: see "Upgrade" and "Offline mode" further down. Where a bullet is no longer
+> true it carries an **Update** line.
 
 ## Phase 1 — what shipped
 
@@ -35,7 +42,7 @@ deliverable and builds on the previous one.
 - JWT access tokens + DB-backed, rotating refresh tokens (revocable — real
   logout). RBAC via `require_roles(...)` dependency.
 - Frontend: `apps/web` has `/register /login /verify-email /reset-password
-  /profile`; `apps/advocate-portal` has `/register /login /profile`.
+/profile`; `apps/advocate-portal` has `/register /login /profile`.
 
 ## Phase 2 — what shipped
 
@@ -53,6 +60,9 @@ deliverable and builds on the previous one.
   only, not citation-backed.
 - Requires `ANTHROPIC_API_KEY` (`apps/api/.env`) — unset by design until you
   add one; the endpoint 503s with a clear `llm_not_configured` error until then.
+  **Update:** no key is needed any more. The provider layer accepts Gemini, Groq, Ollama or
+  Anthropic, and with none configured chat runs in offline mode (see below) instead of returning
+  `503 llm_not_configured`.
 - Frontend: `apps/web` gets `/chat` — message thread, suggested questions
   (the FRD's example queries), new-conversation, and (when logged in) a
   history panel. Mandatory disclaimer shown on every page.
@@ -73,11 +83,14 @@ deliverable and builds on the previous one.
 - Requires `GEMINI_API_KEY` (`apps/api/.env`) — unset by design, same
   "build now, key later" pattern as Phase 2; ingestion records a FAILED
   status with `embeddings_not_configured` until you add one.
+  **Update:** still true for admin ingestion and the 15 official Acts (`pnpm kb:seed`). The Hugging
+  Face loader needs no key, and retrieval is keyword-only until passages are embedded.
 - **`section`/`article` metadata is not populated** — an early attempt at
   heading-detection proved unreliable against real PDF-extracted text and
   was dropped; see
   [`docs/adr/0006-chunking-strategy.md`](adr/0006-chunking-strategy.md).
-- **No documents are pre-loaded.** The roadmap's "initial knowledge base"
+- **No documents are pre-loaded.** (**Update:** the API now loads court judgments from Hugging Face
+  on start when it can reach huggingface.co; see `LEGAL_CORPUS_AUTOLOAD`.) The roadmap's "initial knowledge base"
   (IT Act, DPDP Act, Companies Act, etc.) is a bulk-ingestion follow-up, not
   done in this pass — the pipeline was validated by actually fetching and
   processing the real IT Act 2000 and DPDP Act 2023 PDFs during development
@@ -88,7 +101,7 @@ deliverable and builds on the previous one.
 
 ## Phase 4 — what shipped
 
-- Hybrid retrieval (`apps/api/app/services/rag/retrieval.py::hybrid_search`):
+- Hybrid retrieval (`hybrid_search` in `rag/retrieval.py`, under `apps/api/app/services`):
   pgvector cosine similarity + Postgres full-text search (a generated
   `tsvector` column, GIN-indexed — migration 0005) over `legal_chunks`,
   fused with Reciprocal Rank Fusion (RRF) rather than a paid/ML reranker —
@@ -104,13 +117,15 @@ deliverable and builds on the previous one.
   `INSUFFICIENT_EVIDENCE_MESSAGE` without a second Claude call, rather than
   guessing. A hard cosine-distance threshold was considered and rejected:
   there's no real corpus yet to calibrate one against.
-- **Chat now needs both API keys** to produce a grounded answer:
+- **Chat now needs both API keys** (**Update:** neither is required today; offline mode answers from
+  the retrieved passages alone) to produce an AI-written grounded answer:
   `ANTHROPIC_API_KEY` (unchanged from Phase 2) and `GEMINI_API_KEY` (new —
   same key Phase 3's ingestion uses). Missing `ANTHROPIC_API_KEY` still 503s;
   missing `GEMINI_API_KEY` degrades to the insufficient-evidence reply
   instead, since that failure mode is indistinguishable from "no sources
   matched" on the user's side.
-- **Still no bulk corpus loaded** (carried over from Phase 3) — so in the
+- **Still no bulk corpus loaded** (carried over from Phase 3; **Update:** the Hugging Face load
+  now fills the library when reachable) — so in the
   platform's current state, hybrid search returns nothing for essentially
   every query and almost all chat answers are correctly
   "insufficient evidence". This is the honest behavior of an empty knowledge
@@ -144,6 +159,9 @@ deliverable and builds on the previous one.
   for the Phase 12 admin "high-risk query review" queue.
 - No new API keys or settings — risk scoring rides on the same
   `ANTHROPIC_API_KEY` classification call Phase 2 already required.
+  **Update:** it rides on whichever provider is configured. With none, or if the provider is down,
+  `rules_classifier.py` assigns category, scope and risk from vocabulary, so the advocate
+  recommendation still works.
 
 ## Phase 6 — what shipped
 
@@ -176,6 +194,8 @@ deliverable and builds on the previous one.
   as chat's conversation endpoints.
 - Requires `ANTHROPIC_API_KEY` only — no new API key, no `GEMINI_API_KEY`
   dependency, since there's no retrieval step.
+  **Update:** any configured provider works. With none, `POST /documents` returns a deterministic
+  template draft (`generation_mode: "template"`) instead of a 503.
 - Frontend: `apps/web` gets `/documents` — pick a type, fill the
   questionnaire, get the draft.
 
@@ -219,8 +239,10 @@ deliverable and builds on the previous one.
   the UI (no placeholders).
 - **Quota protection**: per-client rate limit on AI endpoints, query-embedding
   cache, 429 backoff for ingestion.
-- **UI**: shared dark glass design system across both apps; responsive and
+- **UI**: shared design system across both apps; responsive and
   keyboard/screen-reader friendly; skeleton, empty and error states.
+  **Update:** now ink-navy and brass with a warm light theme, a light/dark toggle and a serif display
+  face ([design-system.md](design-system.md)).
 - **Fixes**: `message_role` enum persisted names instead of values (chat
   inserts failed on Postgres); web client's 10s timeout aborted normal
   AI requests; test-suite event-loop leak.
@@ -229,15 +251,33 @@ Per-feature status: [project-status.md](project-status.md).
 
 ## Current cycle: functional MVP (2026-10-08)
 
-The goal of this cycle is a working end-to-end product — register, ask an
-Indian legal question, get a RAG-grounded answer from Gemini or Groq (with
-automatic fallback between them), see inspectable citations and a risk level,
-and find a relevant advocate from the supplied CSV — rather than new phases.
-Phases 8–13 below are therefore **Future scope**: consultation booking,
-payments (refunds, invoices, earnings), the full advocate dashboard, SMS and
-production notifications, the full admin/legal-ops dashboard, and advanced
-compliance (stronger prompt-injection defence, audit logs, tenant isolation).
-A basic prompt-injection boundary around retrieved text already ships.
+The goal of this cycle is a working end-to-end product on your own computer: register, ask an
+Indian legal question, get the cited passages (or, with a key, a RAG-grounded answer from Gemini or
+Groq with automatic fallback between them), see inspectable citations and a risk level, and find a
+relevant advocate from the supplied CSV, rather than new phases. Phases 8–13 below are therefore
+**Future scope**: consultation booking, payments (refunds, invoices, earnings), the full advocate
+dashboard, SMS and production notifications, the full admin/legal-ops dashboard, and advanced
+compliance (stronger prompt-injection defence, audit logs, tenant isolation). A basic
+prompt-injection boundary around retrieved text already ships.
+
+## Offline mode (2026-10-08)
+
+The product no longer needs an AI key to be usable. With none configured (`GET /status` shows
+`llm.mode: "offline"`):
+
+- **Classification** comes from a deterministic rules classifier (`rules_classifier.py`): 14
+  categories with English and Hinglish vocabulary, central/state/court/stamp-duty scope, and
+  LOW/MEDIUM/HIGH/CRITICAL risk. It is also the fallback when a configured provider is unreachable.
+- **Chat** replies with the retrieved passages laid out as numbered, sourced text
+  (`answer_mode: "sources_only"`), or says plainly that nothing in the library matched. HIGH and
+  CRITICAL questions still get the advocate message and matching advocates.
+- **Documents** return a labelled deterministic template draft with placeholders and notes
+  (`generation_mode: "template"`) for all 11 types.
+- **Everything else** (advocate directory, accounts, light/dark themes) is unchanged.
+
+Adding `GEMINI_API_KEY` and/or `GROQ_API_KEY` switches to AI answers; with a Gemini key, vector
+search turns on as well. Details: [`project-status.md`](project-status.md),
+[`api-inventory.md`](api-inventory.md).
 
 ## MVP scope (Phase 16)
 

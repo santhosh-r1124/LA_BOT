@@ -77,7 +77,11 @@ export function statusInfo(status: string): StatusInfo {
 
 export type StepState = 'done' | 'current' | 'todo' | 'failed';
 
-export const STEP_LABELS = ['Registered', 'Reviewed by an administrator', 'Listed in the directory'];
+export const STEP_LABELS = [
+  'Registered',
+  'Reviewed by an administrator',
+  'Listed in the directory',
+];
 
 /** State of each of the three steps for a status. */
 export function stepStates(status: string): [StepState, StepState, StepState] {

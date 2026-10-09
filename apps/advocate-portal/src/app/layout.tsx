@@ -1,22 +1,47 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
+import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 import { AuthProvider } from '@/lib/auth-context';
+import { THEME_COLOR, themeInitScript } from '@/lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Advocate Portal · Legal Platform',
-  description: 'Operating portal for advocates — requests, consultations, matters, earnings.',
+  title: {
+    default: 'Advocate Portal · Legal Advisor',
+    template: '%s · Advocate Portal',
+  },
+  description:
+    'For advocates: register a profile for the Legal Advisor directory, track its verification and keep your details current.',
   robots: { index: false, follow: false },
+};
+
+// Both schemes are declared; the theme toggle keeps `theme-color` in step when a
+// person picks a theme that differs from their OS setting (see lib/theme.ts).
+export const viewport: Viewport = {
+  colorScheme: 'light dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: THEME_COLOR.dark },
+    { media: '(prefers-color-scheme: light)', color: THEME_COLOR.light },
+  ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
-      <body>
+    // suppressHydrationWarning: the inline script below may set data-theme on
+    // <html> before React hydrates.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* No-flash theme: applies a saved light/dark choice before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
+      <body className="flex min-h-dvh flex-col">
         <AuthProvider>
           <SiteHeader />
-          <div id="main">{children}</div>
+          <div id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">
+            {children}
+          </div>
+          <SiteFooter />
         </AuthProvider>
       </body>
     </html>

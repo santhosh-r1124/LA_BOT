@@ -279,7 +279,8 @@ export function profileChanged(current: FormValues, saved: FormValues): boolean 
 
 // ---- Completeness checklist ------------------------------------------------------
 
-export type ChecklistKey = 'location' | 'practiceAreas' | 'languages' | 'experience' | 'fee' | 'bio';
+export type ChecklistKey =
+  'location' | 'practiceAreas' | 'languages' | 'experience' | 'fee' | 'bio';
 
 export interface ChecklistItem {
   key: ChecklistKey;
@@ -412,12 +413,15 @@ export function mapServerError<F extends RegisterField>(
   fallback: string,
 ): MappedError<F> {
   const fields: FieldErrors<F> = {};
-  const allows = (field: RegisterField): field is F => (allowed as readonly string[]).includes(field);
+  const allows = (field: RegisterField): field is F =>
+    (allowed as readonly string[]).includes(field);
 
   if (!isServerErrorLike(err)) return { fields, form: fallback };
 
-  if (err.code === 'email_taken' && allows('email')) {
-    fields.email = 'An account with this email already exists. Log in, or use a different email.';
+  const emailField: RegisterField = 'email';
+  if (err.code === 'email_taken' && allows(emailField)) {
+    fields[emailField] =
+      'An account with this email already exists. Log in, or use a different email.';
     return { fields, form: null };
   }
 
