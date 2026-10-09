@@ -15,6 +15,8 @@ export interface FilterOptions {
   states: SelectOption[];
   languages: SelectOption[];
   cities: string[];
+  /** True once the facet counts are known, so the option labels carry "(n)". */
+  hasCounts?: boolean;
 }
 
 const PANEL_ID = 'advocate-filters';
@@ -156,7 +158,7 @@ export function FilterPanel({
                 placeholder="e.g. Chennai"
                 value={cityInput}
                 onChange={(e) => onCityInput(e.target.value)}
-                className="input"
+                className={`input ${styles.cityInput}`}
                 list="f-city-options"
                 autoComplete="off"
                 spellCheck={false}
@@ -192,6 +194,12 @@ export function FilterPanel({
           </div>
         </div>
 
+        {options.hasCounts && activeCount > 0 && (
+          <p className="hint mt-4" data-testid="counts-note">
+            Numbers in brackets count the whole directory, not only your current filters.
+          </p>
+        )}
+
         {/* Mobile only: close the panel and see the results. */}
         <div className={styles.showResults}>
           <button type="button" className="btn btn-primary btn-block" onClick={onToggle}>
@@ -215,10 +223,13 @@ export function ActiveFilters({
   filters,
   onRemove,
   onClear,
+  showClear = true,
 }: {
   filters: Filters;
   onRemove: (key: FilterKey) => void;
   onClear: () => void;
+  /** Hide the Clear button when the page already offers one right beside the chips. */
+  showClear?: boolean;
 }) {
   const keys = activeFilterKeys(filters);
   if (keys.length === 0) return null;
@@ -240,9 +251,11 @@ export function ActiveFilters({
           </button>
         );
       })}
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onClear}>
-        Clear
-      </button>
+      {showClear && (
+        <button type="button" className={`btn btn-ghost btn-sm ${styles.chipsClear}`} onClick={onClear}>
+          Clear
+        </button>
+      )}
     </div>
   );
 }

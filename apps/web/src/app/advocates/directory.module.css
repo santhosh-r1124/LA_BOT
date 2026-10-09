@@ -4,6 +4,22 @@
  * beside the results; below that they collapse behind a "Filters" button.
  */
 
+/* ---- Hero ------------------------------------------------------------------- */
+/* Same scale and split as the document assistant's header: title and lede on the
+   left, the sample-data notice beside them from 960px. */
+.hero {
+  display: grid;
+  gap: 1.5rem;
+  margin-bottom: clamp(1.75rem, 1.2rem + 2vw, 2.5rem);
+}
+@media (min-width: 960px) {
+  .heroSplit {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+    align-items: end;
+    gap: 3rem;
+  }
+}
+
 /* ---- Frame ------------------------------------------------------------------ */
 .layout {
   display: grid;
@@ -31,6 +47,7 @@
 /* ---- Filter panel -------------------------------------------------------------- */
 .toggle {
   width: 100%;
+  min-height: 2.75rem;
   justify-content: space-between;
 }
 .toggleLabel {
@@ -103,6 +120,12 @@
   color: var(--color-accent);
 }
 
+/* The browser's own datalist triangle (solid white in dark mode) clashes with the
+   thin chevrons on the selects; typing and the arrow keys still open the list. */
+.cityInput::-webkit-calendar-picker-indicator {
+  display: none !important;
+}
+
 .fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -169,8 +192,16 @@
   min-height: 2.25rem;
   max-width: 100%;
 }
+/* Fingers need more room than a pointer. */
+@media (max-width: 767px), (pointer: coarse) {
+  .chip,
+  .chipsClear {
+    min-height: 2.75rem;
+  }
+}
+/* fg-muted, not fg-subtle: the subtle ink is under 4.5:1 on the light chip fill. */
 .chipName {
-  color: var(--color-fg-subtle);
+  color: var(--color-fg-muted);
   font-weight: 500;
 }
 .chipValue {
@@ -310,8 +341,33 @@
 }
 
 /* ---- Skeleton -------------------------------------------------------------------------------- */
+/* The server-side fallback (see directory-loading.tsx): always taller than the screen. */
+.loadingPage {
+  min-height: 100dvh;
+}
+.skToggle {
+  height: 2.75rem;
+  border-radius: var(--radius-control);
+}
+.skPanel {
+  display: none;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.25rem;
+}
+@media (min-width: 1024px) {
+  .skToggle {
+    display: none;
+  }
+  .skPanel {
+    display: flex;
+  }
+}
+
 .skRow {
   display: grid;
+  align-content: start;
+  min-height: 7.25rem; /* the height of a listing with one line of details and a badge */
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.5rem 1rem;
   padding: 1rem 1.1rem;

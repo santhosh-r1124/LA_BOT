@@ -3,6 +3,7 @@ import { ArrowRightIcon, BriefcaseIcon, LanguageIcon, MapPinIcon } from '@/compo
 import type { AdvocateDirectoryEntry } from '@/lib/advocate-client';
 import {
   SAMPLE_LISTING_LABEL,
+  fieldsOfPractice,
   formatInr,
   initials,
   languageName,
@@ -19,7 +20,9 @@ export function AdvocateRow({ advocate: a }: { advocate: AdvocateDirectoryEntry 
   const name = a.display_name || 'Advocate';
   const fee = formatInr(a.consultation_fee);
   const languages = a.languages.map(languageName);
-  const hiddenAreas = a.practice_areas.length - MAX_AREAS;
+  // Internal chat categories (e.g. "Advocate Required") are not fields of practice.
+  const areas = fieldsOfPractice(a.practice_areas);
+  const hiddenAreas = areas.length - MAX_AREAS;
 
   return (
     <li className={styles.row}>
@@ -66,9 +69,9 @@ export function AdvocateRow({ advocate: a }: { advocate: AdvocateDirectoryEntry 
         {fee && <span className={styles.metaItem}>Fee {fee}</span>}
       </div>
 
-      {a.practice_areas.length > 0 && (
+      {areas.length > 0 && (
         <ul className={styles.areas} aria-label="Practice areas">
-          {a.practice_areas.slice(0, MAX_AREAS).map((p) => (
+          {areas.slice(0, MAX_AREAS).map((p) => (
             <li key={p} className="badge">
               {practiceAreaLabel(p)}
             </li>

@@ -8,6 +8,7 @@ import { ApiRequestError } from '@/lib/api-client';
 import { advocateClient, type AdvocateDirectoryEntry } from '@/lib/advocate-client';
 import {
   SAMPLE_LISTING_LABEL,
+  fieldsOfPractice,
   formatInr,
   formatPhone,
   initials,
@@ -19,13 +20,16 @@ import {
 import { CopyButton } from '../_components/copy-button';
 import { directoryHref } from '../_components/directory-memory';
 import { ArrowLeftIcon } from '../_components/local-icons';
+import { otherAdvocates } from '../_components/similar';
 import styles from '../profile.module.css';
 
 const SIMILAR_COUNT = 3;
+/** Fetched per search, so that hiding repeats still leaves enough to show. */
+const SIMILAR_FETCH = 12;
 
 function BackLink({ href }: { href: string }) {
   return (
-    <Link href={href} className="btn btn-ghost btn-sm -ml-2 mb-3">
+    <Link href={href} className="btn btn-ghost -ml-2 mb-3">
       <ArrowLeftIcon />
       Back to directory
     </Link>
@@ -111,18 +115,18 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
     };
   }, [displayName]);
 
-  // Other advocates in the same state with the same first practice area, from the
+  // Other advocates in the same state with the same first field of practice, from the
   // public search endpoint. Failing here just hides the section.
-  const area = advocate?.practice_areas[0];
+  const area = advocate ? fieldsOfPractice(advocate.practice_areas)[0] : undefined;
   const state = advocate?.state_code;
   useEffect(() => {
     if (!advocate || !state) return;
     let cancelled = false;
     advocateClient
-      .search({ state, practice_area: area, page_size: SIMILAR_COUNT + 1 })
+      .search({ state, practice_area: area, page_size: SIMILAR_FETCH })
       .then((res) => {
         if (cancelled) return;
-        setSimilar(res.items.filter((a) => a.id !== advocate.id).slice(0, SIMILAR_COUNT));
+        setSimilar(otherAdvocates(res.items, advocate).slice(0, SIMILAR_COUNT));
       })
       .catch(() => {
         if (!cancelled) setSimilar([]);
@@ -132,18 +136,22 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
     };
   }, [advocate, area, state]);
 
+  const areas = advocate ? fieldsOfPractice(advocate.practice_areas) : [];
   const fee = advocate ? formatInr(advocate.consultation_fee) : null;
   const phone = advocate?.phone ? formatPhone(advocate.phone) : null;
   const location = advocate ? `${advocate.city}, ${stateName(advocate.state_code)}` : '';
 
+  const notFound = !loading && error !== null && !error.retryable;
+
   return (
-    <main className={`page ${styles.page}`}>
-      <BackLink href={backHref} />
+    <main className="page">
+      {/* The not-found card has its own button back, so only one is shown there. */}
+      {!notFound && <BackLink href={backHref} />}
 
       {loading ? (
         <ProfileSkeleton />
       ) : error || !advocate ? (
-        error && !error.retryable ? (
+        notFound ? (
           <EmptyState
             icon={UsersIcon}
             title="Advocate not found"
@@ -153,7 +161,7 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
               </Link>
             }
           >
-            {error.message}
+            {error?.message}
           </EmptyState>
         ) : (
           <ErrorState
@@ -212,9 +220,10 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
             </Notice>
           )}
 
-          <div className={styles.grid}>
+          {/* A verified advocate's contact card sits right under the header on narrow screens. */}
+          <div className={styles.grid} data-contact-first={!advocate.is_sample}>
             <div className={styles.main}>
-              {advocate.practice_areas.length > 0 && (
+              {areas.length > 0 && (
                 <section aria-labelledby="areas-heading">
                   <div className={styles.sectionHead}>
                     <h2 id="areas-heading" className="caps">
@@ -222,7 +231,7 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
                     </h2>
                   </div>
                   <ul className={styles.areas}>
-                    {advocate.practice_areas.map((a) => (
+                    {areas.map((a) => (
                       <li key={a} className="badge badge-accent">
                         {practiceAreaLabel(a)}
                       </li>
@@ -331,7 +340,7 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
                     )}
                     {advocate.email && (
                       <a href={`mailto:${advocate.email}`} className="btn btn-secondary btn-sm">
-                        Email
+                        Send an email
                       </a>
                     )}
                   </div>
@@ -355,14 +364,16 @@ export default function AdvocateProfilePage({ params }: { params: Promise<{ id: 
                     More advocates in {stateName(advocate.state_code)}
                   </h2>
                   <p className="section-lede">
-                    {area ? `Also listed under ${practiceAreaLabel(area)}.` : 'Also listed here.'}
+                    {area
+                      ? `Also listed under ${practiceAreaLabel(area)}.`
+                      : `Other advocates listed in ${stateName(advocate.state_code)}.`}
                   </p>
                 </div>
                 <Link
                   href={`/advocates?state=${encodeURIComponent(advocate.state_code)}${
                     area ? `&practice_area=${encodeURIComponent(area)}` : ''
                   }`}
-                  className="link text-sm font-medium"
+                  className={`link text-sm font-medium ${styles.seeAll}`}
                 >
                   See all
                 </Link>

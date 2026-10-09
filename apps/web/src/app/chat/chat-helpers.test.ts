@@ -6,17 +6,25 @@ import {
   categoryLabel,
   classifyChatError,
   describeSource,
+  FIXTURE_ANSWERABLE,
   formatSourceDate,
   groupHistory,
   inferAnswerMode,
   initials,
   isHighStakes,
+  isOfflineWelcome,
+  isPlaceholderUrl,
+  noMatchLead,
   parseSourcesOnlyText,
+  publicSourceUrl,
   readLlmMode,
   readQuestionParam,
   safeHttpUrl,
   splitTitleLabel,
+  startersFor,
+  STARTER_GROUPS,
   stripAdvocateNote,
+  suggestedQuestions,
 } from './chat-helpers';
 
 const INTRO =
@@ -327,5 +335,94 @@ describe('groupHistory', () => {
     expect(groupHistory([row('a', new Date(2026, 9, 8, 9).toISOString())], now).map((g) => g.label)).toEqual([
       'Today',
     ]);
+  });
+});
+
+describe('source links', () => {
+  const view = (over: Partial<Parameters<typeof publicSourceUrl>[0]>) => ({
+    url: 'https://indiankanoon.org/doc/1/',
+    fixture: false,
+    dataset: 'Sumitedu/indian-case-laws' as string | null,
+    ...over,
+  });
+
+  it('recognises placeholder addresses', () => {
+    expect(isPlaceholderUrl('https://example.com/fixture-1')).toBe(true);
+    expect(isPlaceholderUrl('http://www.example.org/x')).toBe(true);
+    expect(isPlaceholderUrl('https://docs.example.net/')).toBe(true);
+    expect(isPlaceholderUrl('http://localhost:3000/a')).toBe(true);
+    expect(isPlaceholderUrl('https://court.test/a')).toBe(true);
+    expect(isPlaceholderUrl('https://indiankanoon.org/doc/1/')).toBe(false);
+    expect(isPlaceholderUrl('https://notexample.com/')).toBe(false);
+    expect(isPlaceholderUrl('javascript:alert(1)')).toBe(false);
+    expect(isPlaceholderUrl(null)).toBe(false);
+  });
+
+  it('keeps a real link for a real dataset', () => {
+    expect(publicSourceUrl(view({}))).toBe('https://indiankanoon.org/doc/1/');
+  });
+
+  it('never offers "Open source" for a fixture or a placeholder address', () => {
+    expect(publicSourceUrl(view({ fixture: true }))).toBeNull();
+    expect(publicSourceUrl(view({ dataset: 'local/fixture' }))).toBeNull();
+    expect(publicSourceUrl(view({ url: 'https://example.com/fixture-1' }))).toBeNull();
+    expect(publicSourceUrl(view({ url: null }))).toBeNull();
+  });
+});
+
+describe('noMatchLead', () => {
+  const API_TEXT =
+    'Nothing in the legal library matched your question, and AI answers are switched off on this server, so there is no answer to give. Try rewording it around the specific topic, law or document involved, for example a security deposit, unpaid salary or a trademark registration. If this is urgent, the advocate directory lists verified advocates by practice area and state.';
+
+  it('replaces the API text, which repeats the title and suggests topics that may not exist', () => {
+    const lead = noMatchLead(API_TEXT);
+    expect(lead).toMatch(/AI answers are off/);
+    expect(lead).not.toMatch(/trademark|verified|urgent|rewording/i);
+  });
+
+  it('keeps an unfamiliar text but drops the example and "verified" sentences', () => {
+    const lead = noMatchLead(
+      'No passage was found. Try rewording it for example a bounced cheque. The directory lists verified advocates by state.',
+    );
+    expect(lead).toBe('No passage was found.');
+  });
+
+  it('never returns an empty line', () => {
+    expect(noMatchLead('Try rewording it.')).toMatch(/AI answers are off/);
+    expect(noMatchLead('')).toMatch(/AI answers are off/);
+  });
+});
+
+describe('starter questions', () => {
+  const all = STARTER_GROUPS.flatMap((g) => g.questions);
+
+  it('every fixture-answerable question is one of the starters', () => {
+    for (const q of FIXTURE_ANSWERABLE) expect(all).toContain(q);
+  });
+
+  it('shows everything for a full library', () => {
+    expect(startersFor('full')).toEqual(STARTER_GROUPS);
+  });
+
+  it('shows only questions the test passages can answer for a fixture library', () => {
+    const groups = startersFor('fixture');
+    expect(groups.flatMap((g) => g.questions).sort()).toEqual([...FIXTURE_ANSWERABLE].sort());
+    expect(groups.every((g) => g.questions.length > 0)).toBe(true);
+  });
+
+  it('suggests answerable questions for a fixture library and varied topics otherwise', () => {
+    expect(suggestedQuestions('fixture', 3)).toEqual(FIXTURE_ANSWERABLE.slice(0, 3));
+    const full = suggestedQuestions('full', 3);
+    expect(full).toHaveLength(3);
+    expect(new Set(full).size).toBe(3);
+  });
+});
+
+describe('isOfflineWelcome', () => {
+  it('recognises the fixed greeting only', () => {
+    expect(
+      isOfflineWelcome("Hello. I'm the Legal Advisor for Indian law. AI answers are switched off on this server, so I reply by finding"),
+    ).toBe(true);
+    expect(isOfflineWelcome('I can only help with general Indian legal information.')).toBe(false);
   });
 });

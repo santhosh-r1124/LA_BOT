@@ -27,6 +27,23 @@ export function practiceAreaLabel(code: string): string {
   return formatEnumLabel(code);
 }
 
+/**
+ * Chat categories that are also valid stored practice areas but are not fields of
+ * practice: the classifier's "needs an advocate" and "help with a document"
+ * buckets. They never appear as something to hire an advocate for.
+ */
+const NON_FIELD_AREAS: ReadonlySet<string> = new Set(['ADVOCATE_REQUIRED', 'DOCUMENT_GUIDANCE']);
+
+/** True for an area a person would look for in an advocate directory. */
+export function isFieldOfPractice(code: string): boolean {
+  return !NON_FIELD_AREAS.has(code);
+}
+
+/** `codes` without the internal chat categories, order kept. */
+export function fieldsOfPractice<T extends string>(codes: readonly T[]): T[] {
+  return codes.filter(isFieldOfPractice);
+}
+
 export function stateName(code: string): string {
   return (INDIAN_STATE_NAMES as Record<string, string>)[code] ?? code;
 }

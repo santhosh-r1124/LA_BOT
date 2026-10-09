@@ -1,10 +1,9 @@
 /*
- * Advocate profile. Design-system tokens only, so it follows both themes.
- * Two columns from 900px: the profile on the left, contact details on the right.
+ * Advocate profile. Design-system tokens only, so it follows both themes. It uses
+ * the page's full width, so its left edge lines up with the header and the
+ * directory list. Two columns from 900px: the profile on the left, contact
+ * details on the right.
  */
-.page {
-  max-width: 62rem;
-}
 
 .hero {
   display: flex;
@@ -84,6 +83,16 @@
 .aside {
   grid-area: aside;
   min-width: 0;
+}
+/* Narrow screens: a verified advocate's contact card comes straight after the
+   header, because reaching them is what the page is for. Sample listings keep
+   their (made-up) contact card after the details. */
+@media (max-width: 899px) {
+  .grid[data-contact-first='true'] {
+    grid-template-areas:
+      'aside'
+      'main';
+  }
 }
 @media (min-width: 900px) and (min-height: 560px) {
   .aside {
@@ -209,6 +218,13 @@
   position: absolute;
   inset: 0;
   border-radius: var(--radius-item);
+}
+.seeAll {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-inline: 0.5rem;
+  margin-right: -0.5rem;
 }
 .similarName:focus-visible {
   outline: none;

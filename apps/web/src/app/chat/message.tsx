@@ -411,6 +411,7 @@ function NoMatch({
   libraryDocs,
   fixtureLibrary,
   showAdvocateLink,
+  hideSuggestions,
   question,
   onReuse,
   onAsk,
@@ -419,6 +420,8 @@ function NoMatch({
   libraryDocs: number | null;
   fixtureLibrary: boolean;
   showAdvocateLink: boolean;
+  /** Urgent matter: the next step is the advocate card, not another topic to try. */
+  hideSuggestions: boolean;
   question: string | null;
   onReuse?: (question: string) => void;
   onAsk?: (question: string) => void;
@@ -439,11 +442,13 @@ function NoMatch({
             This setup&apos;s library holds only {libraryDocs ?? 'a few'} test passages (marked Fixture), so most
             topics will not match.
           </p>
-          <AskList
-            questions={suggestedQuestions(kind, 4)}
-            onAsk={onAsk}
-            label="These questions do have a matching passage"
-          />
+          {!hideSuggestions && (
+            <AskList
+              questions={suggestedQuestions(kind, 4)}
+              onAsk={onAsk}
+              label="These questions do have a matching passage"
+            />
+          )}
         </>
       ) : (
         <>
@@ -548,6 +553,7 @@ function SourcesOnlyBody({
         libraryDocs={libraryDocs}
         fixtureLibrary={fixtureLibrary}
         showAdvocateLink={!isHighStakes(reply.risk)}
+        hideSuggestions={reply.risk === 'CRITICAL'}
         question={reply.question}
         onReuse={onReuse}
         onAsk={onAsk}

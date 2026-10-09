@@ -19,7 +19,7 @@ export interface SourceOut {
   excerpt?: string | null;
 }
 
-/** A verified directory advocate suggested for a HIGH/CRITICAL question. */
+/** A directory advocate suggested for a HIGH/CRITICAL question (a sample listing when `is_sample`). */
 export interface RecommendedAdvocate {
   id: string;
   display_name: string | null;

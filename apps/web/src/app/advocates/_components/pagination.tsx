@@ -30,7 +30,7 @@ export function Pagination({
       <div className="pager-nav">
         <button
           type="button"
-          className="pager-btn border-line-strong h-10 min-w-10"
+          className="pager-btn border-line-strong h-11 min-w-11"
           disabled={page <= 1 || disabled}
           onClick={() => onPage(page - 1)}
           aria-label="Previous page"
@@ -48,7 +48,7 @@ export function Pagination({
               <button
                 key={item}
                 type="button"
-                className="pager-btn h-10 min-w-10"
+                className="pager-btn h-11 min-w-11"
                 aria-current={item === page ? 'page' : undefined}
                 aria-label={`Page ${item}${item === page ? ', current page' : ''}`}
                 disabled={disabled && item !== page}
@@ -65,7 +65,7 @@ export function Pagination({
         </div>
         <button
           type="button"
-          className="pager-btn border-line-strong h-10 min-w-10"
+          className="pager-btn border-line-strong h-11 min-w-11"
           disabled={page >= pages || disabled}
           onClick={() => onPage(page + 1)}
           aria-label="Next page"
